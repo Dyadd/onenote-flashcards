@@ -1,17 +1,10 @@
-# fly.toml app configuration file generated for onenote-flashcards on 2025-03-14T10:07:00Z
+# fly.toml app configuration file generated for onenote-flashcards on 2025-03-14T11:46:13Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
 app = 'onenote-flashcards'
 primary_region = 'syd'
-
-[mounts]
-  source = "data"
-  destination = "/data"
-
-[processes]
-  app = "node app.js"
 
 [build]
 
