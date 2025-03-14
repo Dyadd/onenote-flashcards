@@ -6,6 +6,10 @@
 app = 'onenote-flashcards'
 primary_region = 'syd'
 
+[mounts]
+  source = "data"
+  destination = "/data"
+
 [build]
 
 [http_service]
