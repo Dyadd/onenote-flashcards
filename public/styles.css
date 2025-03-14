@@ -1,0 +1,183 @@
+/* Enhanced styles for OneNote Flashcards app */
+
+body {
+    background-color: #f8f9fa;
+}
+
+.navbar-brand {
+    font-weight: bold;
+}
+
+/* Flashcard styling */
+.flashcard-container {
+    min-height: 400px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.flashcard {
+    min-height: 250px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 20px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.question {
+    font-size: 1.4rem;
+    font-weight: 500;
+    text-align: center;
+    margin-bottom: 30px;
+    color: #212529;
+    line-height: 1.6;
+}
+
+.answer {
+    font-size: 1.1rem;
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    border-left: 4px solid #0d6efd;
+    line-height: 1.5;
+    transition: all 0.3s ease;
+}
+
+.answer p:last-child {
+    margin-bottom: 0;
+}
+
+.answer strong {
+    color: #0d6efd;
+}
+
+.hidden {
+    display: none;
+}
+
+/* Pages list styling */
+.pages-list {
+    max-height: 400px;
+    overflow-y: auto;
+    border-radius: 6px;
+}
+
+.pages-list .list-group-item {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.pages-list .list-group-item:hover {
+    background-color: #f0f7ff;
+}
+
+.pages-list .list-group-item.active {
+    background-color: #e7f1ff;
+    color: #0a58ca;
+    border-color: #c5dcff;
+}
+
+/* Loading and notification */
+#loading-indicator {
+    padding: 15px;
+    text-align: center;
+    font-style: italic;
+    color: #6c757d;
+}
+
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1050;
+    padding: 15px 25px;
+    border-radius: 5px;
+    color: white;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+    display: none;
+    transition: all 0.3s ease;
+}
+
+.notification.success {
+    background-color: #198754;
+}
+
+.notification.error {
+    background-color: #dc3545;
+}
+
+/* Auto advance container */
+#auto-advance-container {
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-radius: 5px;
+    margin-top: 15px;
+}
+
+/* Instruction card */
+.instruction-card {
+    background-color: #fcfcfc;
+}
+
+.instruction-card .card-body {
+    font-size: 0.95rem;
+}
+
+.instruction-card ol {
+    padding-left: 20px;
+}
+
+.instruction-card li {
+    margin-bottom: 8px;
+}
+
+/* Share button */
+#share-link {
+    margin-left: 10px;
+    font-size: 0.85rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+    .col-lg-9 {
+        margin-top: 20px;
+    }
+    
+    .flashcard {
+        min-height: 200px;
+    }
+    
+    .question {
+        font-size: 1.2rem;
+    }
+}
+
+/* Card counter badge */
+#card-counter {
+    font-size: 1rem;
+}
+
+/* Progress bar */
+#sync-progress-container {
+    height: 8px;
+    margin-top: 15px;
+    background-color: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+#sync-progress {
+    height: 100%;
+    background-color: #0d6efd;
+    transition: width 0.3s ease;
+}
+
+/* Search input */
+#search-input {
+    border-right: none;
+}
+
+#clear-search {
+    border-left: none;
+}

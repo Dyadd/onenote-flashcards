@@ -1,0 +1,22 @@
+{
+  "name": "onenote-flashcards",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@azure/msal-node": "^3.3.0",
+    "@google/generative-ai": "^0.24.0",
+    "axios": "^1.8.3",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsdom": "^26.0.0",
+    "openai": "^4.87.3"
+  }
+}
