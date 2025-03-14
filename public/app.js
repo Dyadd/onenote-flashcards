@@ -1,5 +1,5 @@
 // Enhanced client-side app.js for OneNote Flashcards with OAuth support
-// Optimized for large note collections and better UX
+// Optimized for large note collections and better UX with comprehensive logging
 
 // State management
 let currentNotebookId = '';
@@ -14,13 +14,16 @@ let userName = '';
 
 // DOM Elements
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM fully loaded, initializing application...');
   // Initialize UI elements only after DOM is fully loaded
   initializeUI();
   init();
 });
 
-// Initialize UI elements
+// Initialize UI elements with logging
 function initializeUI() {
+  console.log('Initializing UI elements...');
+  
   // Authentication elements
   window.authStatus = document.getElementById('auth-status');
   window.loginButton = document.getElementById('login-button');
@@ -53,81 +56,158 @@ function initializeUI() {
   // Login section and content section
   window.loginSection = document.getElementById('login-section');
   window.contentSection = document.getElementById('content-section');
+  
+  // Log any missing elements that could cause issues
+  const criticalElements = [
+    { name: 'loginSection', element: window.loginSection },
+    { name: 'contentSection', element: window.contentSection },
+    { name: 'notebookSelect', element: window.notebookSelect },
+    { name: 'sectionSelect', element: window.sectionSelect },
+    { name: 'pagesList', element: window.pagesList }
+  ];
+  
+  criticalElements.forEach(item => {
+    if (!item.element) {
+      console.error(`Critical UI element not found: ${item.name}`);
+    }
+  });
+  
+  console.log('UI elements initialization complete');
 }
 
-// Initialize app
+// Initialize app with detailed logging
 async function init() {
+  console.log('Initializing application...');
   try {
     // Check authentication status first
+    console.log('Checking authentication status...');
     await checkAuthStatus();
+    console.log(`Authentication status: ${isAuthenticated ? 'Authenticated' : 'Not authenticated'}`);
     
     // Setup event listeners
+    console.log('Setting up event listeners...');
     setupEventListeners();
     
     // If authenticated, load content
     if (isAuthenticated) {
+      console.log('User is authenticated, loading user data...');
       await loadUserData();
+    } else {
+      console.log('User is not authenticated, displaying login screen');
     }
     
     // Check URL parameters for direct flashcard access
+    console.log('Checking URL parameters for direct access...');
     checkUrlParams();
+    
+    console.log('Initialization complete');
   } catch (error) {
     console.error('Initialization error:', error);
     showNotification('Error initializing app. Please refresh the page.', true);
   }
 }
 
-// Check if user is authenticated
+// Check if user is authenticated with detailed logging
 async function checkAuthStatus() {
+  console.log('Making request to /api/auth/status...');
   try {
     const response = await fetch('/api/auth/status');
+    console.log('Auth status response received:', response.status);
+    
+    if (!response.ok) {
+      console.error('Auth status check failed with status:', response.status);
+      throw new Error(`Auth status check failed: ${response.status}`);
+    }
+    
     const data = await response.json();
+    console.log('Auth status data:', data);
     
     isAuthenticated = data.authenticated;
     userName = data.userName;
     
+    console.log(`Auth check result: authenticated=${isAuthenticated}, userName=${userName}`);
     updateAuthUI();
+    return data;
   } catch (error) {
     console.error('Error checking auth status:', error);
     isAuthenticated = false;
     updateAuthUI();
+    throw error;
   }
 }
 
-// Update UI based on authentication status
+// Update UI based on authentication status with logging
 function updateAuthUI() {
+  console.log(`Updating UI based on authentication status: ${isAuthenticated}`);
+  
   if (isAuthenticated) {
     // Show authenticated UI
-    if (loginSection) loginSection.style.display = 'none';
-    if (contentSection) contentSection.style.display = 'block';
+    console.log('Showing authenticated UI');
+    if (loginSection) {
+      loginSection.style.display = 'none';
+      console.log('Hide login section');
+    } else {
+      console.error('Login section element not found');
+    }
+    
+    if (contentSection) {
+      contentSection.style.display = 'block';
+      console.log('Show content section');
+    } else {
+      console.error('Content section element not found');
+    }
+    
     if (loginButton) loginButton.style.display = 'none';
     if (logoutButton) logoutButton.style.display = 'block';
     if (userInfo) userInfo.textContent = userName || 'User';
     if (authStatus) authStatus.textContent = 'Signed In';
   } else {
     // Show non-authenticated UI
-    if (loginSection) loginSection.style.display = 'block';
-    if (contentSection) contentSection.style.display = 'none';
+    console.log('Showing non-authenticated UI');
+    if (loginSection) {
+      loginSection.style.display = 'block';
+      console.log('Show login section');
+    } else {
+      console.error('Login section element not found');
+    }
+    
+    if (contentSection) {
+      contentSection.style.display = 'none';
+      console.log('Hide content section');
+    } else {
+      console.error('Content section element not found');
+    }
+    
     if (loginButton) loginButton.style.display = 'block';
     if (logoutButton) logoutButton.style.display = 'none';
     if (userInfo) userInfo.textContent = '';
     if (authStatus) authStatus.textContent = 'Not Signed In';
   }
+  
+  console.log('UI update complete');
 }
 
-// Load user data (notebooks, flashcards)
+// Load user data (notebooks, flashcards) with detailed logging
 async function loadUserData() {
+  console.log('Loading user data...');
   try {
+    console.log('Loading notebooks...');
     await loadNotebooks();
+    
+    console.log('Loading flashcards...');
     await loadFlashcards();
     
     // Check for last selected notebook/section
+    console.log('Loading last selection...');
     loadLastSelection();
+    
+    console.log('User data loaded successfully');
   } catch (error) {
     console.error('Error loading user data:', error);
     
     // If unauthorized, redirect to login
     if (error.status === 401) {
+      console.log('Authentication required, redirecting to login');
       window.location.href = '/auth/signin';
     } else {
       showNotification('Error loading your data. Please try again.', true);
@@ -135,23 +215,30 @@ async function loadUserData() {
   }
 }
 
-// Helper functions for UI
+// Helper functions for UI with logging
 function showLoading(message) {
+  console.log(`Showing loading indicator: ${message}`);
   const loadingElement = document.getElementById('loading-indicator');
   if (loadingElement) {
     loadingElement.textContent = message || 'Loading...';
     loadingElement.style.display = 'block';
+  } else {
+    console.error('Loading indicator element not found');
   }
 }
 
 function hideLoading() {
+  console.log('Hiding loading indicator');
   const loadingElement = document.getElementById('loading-indicator');
   if (loadingElement) {
     loadingElement.style.display = 'none';
+  } else {
+    console.error('Loading indicator element not found');
   }
 }
 
 function showNotification(message, isError = false) {
+  console.log(`Showing notification: ${message}, isError: ${isError}`);
   const notification = document.getElementById('notification') || createNotificationElement();
   notification.textContent = message;
   notification.className = `notification ${isError ? 'error' : 'success'}`;
@@ -164,6 +251,7 @@ function showNotification(message, isError = false) {
 }
 
 function createNotificationElement() {
+  console.log('Creating notification element');
   const notification = document.createElement('div');
   notification.id = 'notification';
   notification.className = 'notification';
@@ -172,12 +260,16 @@ function createNotificationElement() {
 }
 
 function updateSyncStatus(message) {
+  console.log(`Updating sync status: ${message}`);
   if (syncStatus) {
     syncStatus.textContent = message;
+  } else {
+    console.error('Sync status element not found');
   }
 }
 
 function updateButtons(disableAll) {
+  console.log(`Updating buttons, disableAll: ${disableAll}`);
   const buttons = document.querySelectorAll('button');
   buttons.forEach(button => {
     if (disableAll) {
@@ -193,41 +285,54 @@ function updateButtons(disableAll) {
   });
 }
 
-// Initialize auto-advance feature
+// Initialize auto-advance feature with logging
 let autoAdvanceTimer = null;
 
 function setupAutoAdvance() {
+  console.log('Setting up auto-advance feature');
   const autoAdvanceCheckbox = document.getElementById('auto-advance');
-  if (!autoAdvanceCheckbox) return;
+  if (!autoAdvanceCheckbox) {
+    console.error('Auto-advance checkbox not found');
+    return;
+  }
   
   autoAdvanceCheckbox.addEventListener('change', function() {
     if (this.checked) {
+      console.log('Auto-advance enabled');
       startAutoAdvance();
     } else {
+      console.log('Auto-advance disabled');
       stopAutoAdvance();
     }
   });
 }
 
 function startAutoAdvance() {
+  console.log('Starting auto-advance');
   // Stop any existing timer
   stopAutoAdvance();
   
   // Set delay based on user preference (default 7 seconds)
-  const delay = parseInt(document.getElementById('auto-advance-delay')?.value || 7) * 1000;
+  const delayElement = document.getElementById('auto-advance-delay');
+  const delay = parseInt(delayElement?.value || 7) * 1000;
+  console.log(`Auto-advance delay: ${delay}ms`);
   
   autoAdvanceTimer = setInterval(() => {
     // If answer is showing, move to next card
     if (!answerElement.classList.contains('hidden')) {
       if (!nextButton.disabled) {
+        console.log('Auto-advance: moving to next card');
         nextButton.click();
       } else {
         // Reached the end, stop auto-advance
+        console.log('Auto-advance: reached the end, stopping');
         stopAutoAdvance();
-        document.getElementById('auto-advance').checked = false;
+        const checkbox = document.getElementById('auto-advance');
+        if (checkbox) checkbox.checked = false;
       }
     } else {
       // If answer is hidden, show it
+      console.log('Auto-advance: showing answer');
       toggleButton.click();
     }
   }, delay);
@@ -235,106 +340,172 @@ function startAutoAdvance() {
 
 function stopAutoAdvance() {
   if (autoAdvanceTimer) {
+    console.log('Stopping auto-advance timer');
     clearInterval(autoAdvanceTimer);
     autoAdvanceTimer = null;
   }
 }
 
-// Load saved user selections
+// Load saved user selections with logging
 function loadLastSelection() {
+  console.log('Loading last notebook/section selection');
   const savedSelection = localStorage.getItem('lastSelection');
   if (savedSelection) {
     try {
       const { notebookId, sectionId } = JSON.parse(savedSelection);
+      console.log(`Found saved selection: notebookId=${notebookId}, sectionId=${sectionId}`);
+      
       if (notebookId) {
-        notebookSelect.value = notebookId;
-        loadSections(notebookId).then(() => {
-          if (sectionId) {
-            sectionSelect.value = sectionId;
-            currentSectionId = sectionId;
-            currentNotebookId = notebookId;
-            syncButton.disabled = false;
-            fullSyncButton.disabled = false;
-          }
-        });
+        if (notebookSelect) {
+          console.log(`Setting notebook select to ${notebookId}`);
+          notebookSelect.value = notebookId;
+          loadSections(notebookId).then(() => {
+            if (sectionId) {
+              console.log(`Setting section select to ${sectionId}`);
+              if (sectionSelect) {
+                sectionSelect.value = sectionId;
+                currentSectionId = sectionId;
+                currentNotebookId = notebookId;
+                
+                if (syncButton) syncButton.disabled = false;
+                if (fullSyncButton) fullSyncButton.disabled = false;
+              } else {
+                console.error('Section select element not found');
+              }
+            }
+          });
+        } else {
+          console.error('Notebook select element not found');
+        }
       }
     } catch (e) {
       console.error('Error loading last selection:', e);
     }
+  } else {
+    console.log('No saved selection found');
   }
 }
 
-// Save user selections
+// Save user selections with logging
 function saveSelection() {
   if (currentNotebookId && currentSectionId) {
+    console.log(`Saving selection: notebookId=${currentNotebookId}, sectionId=${currentSectionId}`);
     localStorage.setItem('lastSelection', JSON.stringify({
       notebookId: currentNotebookId,
       sectionId: currentSectionId
     }));
+  } else {
+    console.log('Not saving selection - incomplete notebook/section data');
   }
 }
 
-// Check URL parameters for direct access
+// Check URL parameters for direct access with logging
 function checkUrlParams() {
+  console.log('Checking URL parameters');
   const urlParams = new URLSearchParams(window.location.search);
   const pageId = urlParams.get('page');
-  if (pageId && allFlashcards[pageId]) {
-    selectPage(pageId);
+  console.log(`URL parameter 'page': ${pageId}`);
+  
+  if (pageId) {
+    console.log(`Page ID found in URL: ${pageId}`);
+    
+    if (allFlashcards && allFlashcards[pageId]) {
+      console.log(`Found flashcards for page ${pageId}, selecting page`);
+      selectPage(pageId);
+    } else {
+      console.log(`No flashcards found for page ${pageId}`);
+    }
+  } else {
+    console.log('No page ID in URL parameters');
   }
 }
 
-// Generate shareable URL for a flashcard set
+// Generate shareable URL for a flashcard set with logging
 function getShareableUrl(pageId) {
   const baseUrl = window.location.origin + window.location.pathname;
-  return `${baseUrl}?page=${pageId}`;
+  const url = `${baseUrl}?page=${pageId}`;
+  console.log(`Generated shareable URL: ${url}`);
+  return url;
 }
 
-// Handle error responses from fetch requests
+// Handle error responses from fetch requests with logging
 async function handleFetchResponse(response) {
+  console.log(`Handling fetch response, status: ${response.status}`);
+  
   if (response.status === 401 || response.status === 403) {
     // Authentication issue
+    console.log('Authentication required (401/403), redirecting to login');
     window.location.href = '/auth/signin';
     throw { status: response.status, message: 'Authentication required' };
   }
   
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+    console.error(`Error response: ${response.status} ${response.statusText}`);
+    let errorData;
+    try {
+      errorData = await response.json();
+      console.error('Error data:', errorData);
+    } catch (e) {
+      console.error('Could not parse error response as JSON');
+      errorData = { error: 'Unknown error' };
+    }
+    
     throw { 
       status: response.status, 
       message: errorData.error || `Error: ${response.status} ${response.statusText}`
     };
   }
   
+  console.log('Response OK, parsing JSON');
   return response.json();
 }
 
-// Load notebooks from API
+// Load notebooks from API with detailed logging
 async function loadNotebooks() {
+  console.log('Loading notebooks from API');
   try {
     showLoading('Loading notebooks...');
+    console.log('Making request to /api/notebooks');
     const response = await fetch('/api/notebooks');
     
+    console.log(`Notebooks response status: ${response.status}`);
     // Handle authentication errors
     if (response.status === 401) {
       // Redirect to login page
+      console.log('Authentication required (401), redirecting to login');
       window.location.href = '/auth/signin';
       throw { status: 401, message: 'Authentication required' };
     }
     
     if (!response.ok) {
-      const errorData = await response.json();
+      console.error(`Error loading notebooks: ${response.status} ${response.statusText}`);
+      let errorData;
+      try {
+        errorData = await response.json();
+        console.error('Error data:', errorData);
+      } catch (e) {
+        console.error('Could not parse error response as JSON');
+        errorData = { error: 'Failed to fetch notebooks' };
+      }
       throw new Error(errorData.error || 'Failed to fetch notebooks');
     }
     
     const notebooks = await response.json();
+    console.log(`Received ${notebooks.length} notebooks`);
     
-    notebookSelect.innerHTML = '<option value="">Select a notebook</option>';
-    notebooks.forEach(notebook => {
-        const option = document.createElement('option');
-        option.value = notebook.id;
-        option.textContent = notebook.displayName;
-        notebookSelect.appendChild(option);
-    });
+    if (notebookSelect) {
+      console.log('Populating notebook select dropdown');
+      notebookSelect.innerHTML = '<option value="">Select a notebook</option>';
+      notebooks.forEach(notebook => {
+          console.log(`Adding notebook: ${notebook.displayName} (${notebook.id})`);
+          const option = document.createElement('option');
+          option.value = notebook.id;
+          option.textContent = notebook.displayName;
+          notebookSelect.appendChild(option);
+      });
+    } else {
+      console.error('Notebook select element not found');
+    }
     
     hideLoading();
     return notebooks;
@@ -348,15 +519,24 @@ async function loadNotebooks() {
   }
 }
 
-// Load sections for selected notebook
+// Load sections for selected notebook with detailed logging
 async function loadSections(notebookId) {
+  console.log(`Loading sections for notebook: ${notebookId}`);
   try {
-    if (!notebookId) return;
+    if (!notebookId) {
+      console.log('No notebook ID provided, skipping section load');
+      return;
+    }
     
     showLoading('Loading sections...');
+    console.log(`Making request to /api/notebooks/${notebookId}/sections`);
     const response = await fetch(`/api/notebooks/${notebookId}/sections`);
+    
+    console.log(`Sections response status: ${response.status}`);
     if (!response.ok) {
+      console.error(`Error loading sections: ${response.status} ${response.statusText}`);
       if (response.status === 401) {
+        console.log('Authentication required (401), redirecting to login');
         window.location.href = '/auth/signin';
         throw { status: 401, message: 'Authentication required' };
       }
@@ -364,14 +544,21 @@ async function loadSections(notebookId) {
     }
     
     const sections = await response.json();
+    console.log(`Received ${sections.length} sections`);
     
-    sectionSelect.innerHTML = '<option value="">Select a section</option>';
-    sections.forEach(section => {
-        const option = document.createElement('option');
-        option.value = section.id;
-        option.textContent = section.displayName;
-        sectionSelect.appendChild(option);
-    });
+    if (sectionSelect) {
+      console.log('Populating section select dropdown');
+      sectionSelect.innerHTML = '<option value="">Select a section</option>';
+      sections.forEach(section => {
+          console.log(`Adding section: ${section.displayName} (${section.id})`);
+          const option = document.createElement('option');
+          option.value = section.id;
+          option.textContent = section.displayName;
+          sectionSelect.appendChild(option);
+      });
+    } else {
+      console.error('Section select element not found');
+    }
     
     hideLoading();
     return sections;
@@ -385,9 +572,11 @@ async function loadSections(notebookId) {
   }
 }
 
-// Sync section flashcards (incremental)
+// Sync section flashcards (incremental) with detailed logging
 async function syncSection(notebookId, sectionId) {
+  console.log(`Syncing section: notebookId=${notebookId}, sectionId=${sectionId}`);
   if (isSyncing) {
+    console.log('Sync already in progress, aborting');
     showNotification('Sync already in progress. Please wait.');
     return;
   }
@@ -400,20 +589,27 @@ async function syncSection(notebookId, sectionId) {
     if (syncButton) syncButton.disabled = true;
     if (fullSyncButton) fullSyncButton.disabled = true;
     
+    console.log(`Making request to /api/sync/section/${sectionId}`);
     const response = await fetch(`/api/sync/section/${sectionId}`, {
       method: 'POST'
     });
     
+    console.log(`Sync response status: ${response.status}`);
     // Handle response with common error handler
     const result = await handleFetchResponse(response);
+    console.log('Sync result:', result);
     
     if (result.success) {
+      console.log(`Sync complete, updated ${result.cardsUpdated} flashcards`);
+      console.log('Reloading flashcards after sync');
       await loadFlashcards();
       showNotification(`Sync complete! Updated ${result.cardsUpdated} flashcards.`);
       
       // Save last sync info
+      console.log('Saving last sync info');
       saveLastSyncInfo(notebookId, sectionId);
     } else {
+      console.error('Sync failed:', result);
       showNotification('Sync failed. Please try again.', true);
     }
   } catch (error) {
@@ -422,6 +618,7 @@ async function syncSection(notebookId, sectionId) {
       showNotification('Failed to sync. Please try again.', true);
     }
   } finally {
+    console.log('Sync operation complete');
     isSyncing = false;
     updateSyncStatus('');
     updateButtons(false);
@@ -430,16 +627,20 @@ async function syncSection(notebookId, sectionId) {
   }
 }
 
-// Perform full sync (for large note collections)
+// Perform full sync (for large note collections) with detailed logging
 async function fullSync(notebookId, sectionId) {
+  console.log(`Full sync requested: notebookId=${notebookId}, sectionId=${sectionId}`);
   if (isSyncing) {
+    console.log('Sync already in progress, aborting');
     showNotification('Sync already in progress. Please wait.');
     return;
   }
   
   try {
     // Confirm because this can take a while
+    console.log('Prompting for confirmation');
     if (!confirm('Full sync may take several minutes for large note collections. Continue?')) {
+      console.log('User cancelled full sync');
       return;
     }
     
@@ -451,20 +652,27 @@ async function fullSync(notebookId, sectionId) {
     if (fullSyncButton) fullSyncButton.disabled = true;
     
     // Request full sync
+    console.log(`Making request to /api/sync/full/${notebookId}/${sectionId}`);
     const response = await fetch(`/api/sync/full/${notebookId}/${sectionId}`, {
       method: 'POST'
     });
     
+    console.log(`Full sync response status: ${response.status}`);
     // Handle response with common error handler
     const result = await handleFetchResponse(response);
+    console.log('Full sync result:', result);
     
     if (result.success) {
+      console.log(`Full sync complete, created ${result.cardsUpdated} flashcards`);
+      console.log('Reloading flashcards after full sync');
       await loadFlashcards();
       showNotification(`Full sync complete! Created ${result.cardsUpdated} flashcards.`);
       
       // Save last sync info
+      console.log('Saving last sync info');
       saveLastSyncInfo(notebookId, sectionId);
     } else {
+      console.error('Full sync failed:', result);
       showNotification('Full sync failed. Please try again.', true);
     }
   } catch (error) {
@@ -473,6 +681,7 @@ async function fullSync(notebookId, sectionId) {
       showNotification('Failed to perform full sync. Please try again.', true);
     }
   } finally {
+    console.log('Full sync operation complete');
     isSyncing = false;
     updateSyncStatus('');
     updateButtons(false);
@@ -481,29 +690,49 @@ async function fullSync(notebookId, sectionId) {
   }
 }
 
-// Save last sync information
+// Save last sync information with logging
 async function saveLastSyncInfo(notebookId, sectionId) {
+  console.log(`Saving last sync info: notebookId=${notebookId}, sectionId=${sectionId}`);
   try {
-    await fetch('/api/sync/save-last', {
+    console.log('Making request to /api/sync/save-last');
+    const response = await fetch('/api/sync/save-last', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ notebookId, sectionId })
     });
+    
+    console.log(`Save sync info response status: ${response.status}`);
+    if (!response.ok) {
+      console.error(`Error saving sync info: ${response.status} ${response.statusText}`);
+    } else {
+      console.log('Last sync info saved successfully');
+    }
   } catch (error) {
     console.error('Error saving sync info:', error);
   }
 }
 
-// Load all flashcards
+// Load all flashcards with detailed logging
 async function loadFlashcards() {
+  console.log('Loading flashcards from API');
   try {
     showLoading('Loading flashcards...');
+    console.log('Making request to /api/flashcards');
     const response = await fetch('/api/flashcards');
     
+    console.log(`Flashcards response status: ${response.status}`);
     // Handle response with common error handler
     allFlashcards = await handleFetchResponse(response);
+    
+    const flashcardCount = Object.keys(allFlashcards).length;
+    console.log(`Received flashcards for ${flashcardCount} pages`);
+    if (flashcardCount > 0) {
+      console.log('First few flashcard pages:', Object.keys(allFlashcards).slice(0, 3));
+    }
+    
+    console.log('Rendering pages list');
     renderPagesList();
     hideLoading();
   } catch (error) {
@@ -515,16 +744,21 @@ async function loadFlashcards() {
   }
 }
 
-// Filter pages by search term
+// Filter pages by search term with logging
 function filterPages(searchTerm) {
+  console.log(`Filtering pages by search term: "${searchTerm}"`);
   if (!searchTerm) {
+    console.log('Empty search term, showing all pages');
     renderPagesList();
     return;
   }
   
   searchTerm = searchTerm.toLowerCase();
   
-  const filteredPageIds = Object.keys(allFlashcards).filter(pageId => {
+  const allPageIds = Object.keys(allFlashcards);
+  console.log(`Filtering ${allPageIds.length} total pages`);
+  
+  const filteredPageIds = allPageIds.filter(pageId => {
     const pageData = allFlashcards[pageId];
     
     // Check if page title matches
@@ -539,19 +773,26 @@ function filterPages(searchTerm) {
     );
   });
   
+  console.log(`Found ${filteredPageIds.length} pages matching search term`);
   renderPagesList(filteredPageIds);
 }
 
-// Render pages list with flashcards
+// Render pages list with flashcards with detailed logging
 function renderPagesList(specificPageIds) {
-    if (!pagesList) return;
+    console.log('Rendering pages list');
+    if (!pagesList) {
+      console.error('Pages list element not found');
+      return;
+    }
     
     pagesList.innerHTML = '';
     
     // Use provided pageIds or all pages
     const pageIds = specificPageIds || Object.keys(allFlashcards);
+    console.log(`Rendering ${pageIds.length} pages`);
     
     if (pageIds.length === 0) {
+        console.log('No pages to display');
         const listItem = document.createElement('li');
         listItem.className = 'list-group-item';
         listItem.textContent = specificPageIds 
@@ -562,17 +803,23 @@ function renderPagesList(specificPageIds) {
     }
     
     // Sort pages by title for better organization
+    console.log('Sorting pages by title');
     pageIds.sort((a, b) => {
         const titleA = allFlashcards[a]?.pageTitle || '';
         const titleB = allFlashcards[b]?.pageTitle || '';
         return titleA.localeCompare(titleB);
     });
     
+    console.log('Adding page items to list');
     pageIds.forEach(pageId => {
-        if (!allFlashcards[pageId]) return;
+        if (!allFlashcards[pageId]) {
+          console.warn(`Page ${pageId} not found in flashcards`);
+          return;
+        }
         
         const pageData = allFlashcards[pageId];
         const cardCount = pageData.cards.length;
+        console.log(`Adding page: ${pageData.pageTitle} (${pageId}) with ${cardCount} cards`);
         
         const listItem = document.createElement('li');
         listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
@@ -580,6 +827,7 @@ function renderPagesList(specificPageIds) {
         // Highlight currently selected page
         if (pageId === currentPageId) {
             listItem.classList.add('active');
+            console.log(`Highlighting current page: ${pageId}`);
         }
         
         const titleSpan = document.createElement('span');
@@ -604,6 +852,7 @@ function renderPagesList(specificPageIds) {
     });
     
     // Show count of results
+    console.log(`Showing count of ${pageIds.length} pages`);
     const resultCountContainer = document.createElement('div');
     resultCountContainer.className = 'text-muted small mt-2';
     resultCountContainer.textContent = `Showing ${pageIds.length} pages`;
@@ -611,6 +860,7 @@ function renderPagesList(specificPageIds) {
     // Remove any existing count before adding new one
     const existingCount = pagesList.parentNode.querySelector('.text-muted.small.mt-2');
     if (existingCount) {
+        console.log('Removing existing count element');
         existingCount.remove();
     }
     
@@ -619,265 +869,11 @@ function renderPagesList(specificPageIds) {
     // Update pages count badge if it exists
     const pagesCount = document.getElementById('pages-count');
     if (pagesCount) {
+        console.log(`Updating pages count badge: ${pageIds.length}`);
         pagesCount.textContent = pageIds.length;
-    }
-}
-
-// Select a page and show its flashcards
-function selectPage(pageId) {
-    if (!allFlashcards[pageId]) {
-        showNotification('Selected page not found');
-        return;
+    } else {
+        console.error('Pages count badge element not found');
     }
     
-    currentPageId = pageId;
-    currentCardIndex = 0;
-    
-    const pageData = allFlashcards[pageId];
-    currentPageTitle.textContent = pageData.pageTitle;
-    
-    // Update URL for sharing without reloading
-    const url = new URL(window.location);
-    url.searchParams.set('page', pageId);
-    window.history.pushState({}, '', url);
-    
-    renderCurrentCard();
-    
-    // Highlight selected page
-    const pageItems = pagesList.querySelectorAll('li');
-    pageItems.forEach(item => {
-        item.classList.remove('active');
-        if (item.querySelector('.page-title') && 
-            item.querySelector('.page-title').textContent === pageData.pageTitle) {
-            item.classList.add('active');
-        }
-    });
-    
-    // Display share link
-    const shareLink = document.getElementById('share-link');
-    if (shareLink) {
-        shareLink.style.display = 'block';
-        shareLink.onclick = () => {
-            const shareUrl = getShareableUrl(pageId);
-            navigator.clipboard.writeText(shareUrl).then(() => {
-                showNotification('Link copied to clipboard!');
-            });
-        };
-    }
-}
-
-// Helper function to get current user's flashcards for a specific page
-function getCurrentUserFlashcards(pageId) {
-    if (!pageId || !allFlashcards || Object.keys(allFlashcards).length === 0) {
-        return null;
-    }
-    
-    return allFlashcards[pageId];
-}
-
-// Render current flashcard
-function renderCurrentCard() {
-    if (!isAuthenticated) {
-        return; // Don't render if not authenticated
-    }
-    
-    if (!currentPageId || !getCurrentUserFlashcards(currentPageId)) {
-        questionElement.textContent = 'Select a page to view flashcards';
-        answerElement.textContent = '';
-        answerElement.classList.add('hidden');
-        prevButton.disabled = true;
-        nextButton.disabled = true;
-        toggleButton.disabled = true;
-        cardCounter.textContent = '0/0';
-        return;
-    }
-    
-    const pageData = getCurrentUserFlashcards(currentPageId);
-    const cards = pageData.cards;
-    
-    if (!cards || cards.length === 0) {
-        questionElement.textContent = 'No flashcards for this page yet';
-        answerElement.textContent = '';
-        answerElement.classList.add('hidden');
-        prevButton.disabled = true;
-        nextButton.disabled = true;
-        toggleButton.disabled = true;
-        cardCounter.textContent = '0/0';
-        return;
-    }
-    
-    const currentCard = cards[currentCardIndex];
-    
-    // Format content nicely
-    questionElement.innerHTML = formatContent(currentCard.question);
-    answerElement.innerHTML = formatContent(currentCard.answer);
-    answerElement.classList.add('hidden');
-    
-    toggleButton.textContent = 'Show Answer';
-    toggleButton.disabled = false;
-    prevButton.disabled = currentCardIndex === 0;
-    nextButton.disabled = currentCardIndex === cards.length - 1;
-    
-    cardCounter.textContent = `${currentCardIndex + 1}/${cards.length}`;
-    
-    // Add auto-advance checkbox if we have multiple cards
-    if (cards.length > 1) {
-        const autoAdvanceContainer = document.getElementById('auto-advance-container');
-        if (autoAdvanceContainer) {
-            autoAdvanceContainer.style.display = 'block';
-        }
-    }
-}
-
-// Format flashcard content with basic formatting
-function formatContent(text) {
-    if (!text) return '';
-    
-    // Convert line breaks to paragraphs
-    let formatted = text.split('\n\n').map(para => `<p>${para}</p>`).join('');
-    
-    // Handle single line breaks
-    formatted = formatted.replace(/\n/g, '<br>');
-    
-    // Bold important terms (text between asterisks or terms followed by colon)
-    formatted = formatted.replace(/\*([^*]+)\*/g, '<strong>$1</strong>');
-    formatted = formatted.replace(/\b([A-Za-z\s]+):/g, '<strong>$1:</strong>');
-    
-    return formatted;
-}
-
-// Setup event listeners
-function setupEventListeners() {
-    // Authentication buttons
-    if (loginButton) {
-        loginButton.addEventListener('click', () => {
-            window.location.href = '/auth/signin';
-        });
-    }
-    
-    if (loginButtonMain) {
-        loginButtonMain.addEventListener('click', () => {
-            window.location.href = '/auth/signin';
-        });
-    }
-    
-    if (logoutButton) {
-        logoutButton.addEventListener('click', () => {
-            window.location.href = '/auth/signout';
-        });
-    }
-    
-    // Notebook selection
-    if (notebookSelect) {
-        notebookSelect.addEventListener('change', () => {
-            currentNotebookId = notebookSelect.value;
-            if (currentNotebookId) {
-                loadSections(currentNotebookId);
-                saveSelection();
-            }
-        });
-    }
-    
-    // Section selection
-    if (sectionSelect) {
-        sectionSelect.addEventListener('change', () => {
-            currentSectionId = sectionSelect.value;
-            if (syncButton) syncButton.disabled = !currentSectionId;
-            if (fullSyncButton) fullSyncButton.disabled = !currentSectionId;
-            saveSelection();
-        });
-    }
-    
-    // Incremental sync button
-    if (syncButton) {
-        syncButton.addEventListener('click', () => {
-            if (currentNotebookId && currentSectionId) {
-                syncSection(currentNotebookId, currentSectionId);
-            }
-        });
-    }
-    
-    // Full sync button
-    if (fullSyncButton) {
-        fullSyncButton.addEventListener('click', () => {
-            if (currentNotebookId && currentSectionId) {
-                fullSync(currentNotebookId, currentSectionId);
-            }
-        });
-    }
-    
-    // Search functionality
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            filterPages(e.target.value);
-        });
-        
-        // Clear search
-        const clearSearchBtn = document.getElementById('clear-search');
-        if (clearSearchBtn) {
-            clearSearchBtn.addEventListener('click', () => {
-                searchInput.value = '';
-                renderPagesList();
-            });
-        }
-    }
-    
-    // Flashcard navigation
-    if (prevButton) {
-        prevButton.addEventListener('click', () => {
-            if (currentCardIndex > 0) {
-                currentCardIndex--;
-                renderCurrentCard();
-            }
-        });
-    }
-    
-    if (nextButton) {
-        nextButton.addEventListener('click', () => {
-            const cards = getCurrentUserFlashcards(currentPageId)?.cards || [];
-            if (currentCardIndex < cards.length - 1) {
-                currentCardIndex++;
-                renderCurrentCard();
-            }
-        });
-    }
-    
-    // Show/hide answer
-    if (toggleButton) {
-        toggleButton.addEventListener('click', () => {
-            answerElement.classList.toggle('hidden');
-            toggleButton.textContent = answerElement.classList.contains('hidden') ? 'Show Answer' : 'Hide Answer';
-        });
-    }
-    
-    // Keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-        // Only if we're viewing flashcards and authenticated
-        if (!currentPageId || !isAuthenticated) return;
-        
-        switch(e.key) {
-            case 'ArrowLeft':
-                // Previous card
-                if (prevButton && !prevButton.disabled) {
-                    prevButton.click();
-                }
-                break;
-            case 'ArrowRight':
-                // Next card
-                if (nextButton && !nextButton.disabled) {
-                    nextButton.click();
-                }
-                break;
-            case ' ':
-                // Space bar to toggle answer
-                if (toggleButton && !toggleButton.disabled) {
-                    toggleButton.click();
-                    e.preventDefault(); // Prevent scrolling
-                }
-                break;
-        }
-    });
-    
-    // Auto-advance setup
-    setupAutoAdvance();
+    console.log('Finished rendering pages list');
 }
