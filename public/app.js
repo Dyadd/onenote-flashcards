@@ -12,6 +12,11 @@ let syncProgress = { total: 0, processed: 0 };
 let isAuthenticated = false;
 let userName = '';
 
+// Temporary empty function definition to prevent errors
+function setupEventListeners() {
+  console.log('Placeholder for setupEventListeners - actual function defined later');
+}
+
 // DOM Elements
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM fully loaded, initializing application...');
