@@ -12,9 +12,33 @@ let syncProgress = { total: 0, processed: 0 };
 let isAuthenticated = false;
 let userName = '';
 
-// Temporary empty function definition to prevent errors
+// Update your temporary setupEventListeners function to include just the login button handlers
+
 function setupEventListeners() {
-  console.log('Placeholder for setupEventListeners - actual function defined later');
+  console.log('Setting up critical event listeners');
+  
+  // Authentication buttons
+  const loginButton = document.getElementById('login-button');
+  if (loginButton) {
+    console.log('Setting up login button');
+    loginButton.addEventListener('click', () => {
+      console.log('Login button clicked, redirecting to /auth/signin');
+      window.location.href = '/auth/signin';
+    });
+  } else {
+    console.error('Login button not found');
+  }
+  
+  const loginButtonMain = document.getElementById('login-button-main');
+  if (loginButtonMain) {
+    console.log('Setting up main login button');
+    loginButtonMain.addEventListener('click', () => {
+      console.log('Main login button clicked, redirecting to /auth/signin');
+      window.location.href = '/auth/signin';
+    });
+  } else {
+    console.error('Main login button not found');
+  }
 }
 
 // DOM Elements
