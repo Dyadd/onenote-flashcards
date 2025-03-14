@@ -10,6 +10,9 @@ primary_region = 'syd'
   source = "data"
   destination = "/data"
 
+[processes]
+  app = "node app.js"
+
 [build]
 
 [http_service]
