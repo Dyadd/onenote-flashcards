@@ -43,7 +43,7 @@ const msalConfig = {
 };
 
 const msalClient = new ConfidentialClientApplication(msalConfig);
-const msGraphScopes = ['offline_access', 'Notes.Read']; // Include offline_access for refresh tokens
+const msGraphScopes = ['offline_access', 'Notes.Read', 'User.Read']; // Include offline_access for refresh tokens
 
 // Redirect URI should match what's registered in Microsoft Entra app registration
 const REDIRECT_URI = process.env.REDIRECT_URI || `http://localhost:${process.env.PORT || 3000}/auth/callback`;
