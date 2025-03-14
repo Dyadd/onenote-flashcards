@@ -18,5 +18,8 @@
     "express": "^4.21.2",
     "jsdom": "^26.0.0",
     "openai": "^4.87.3"
+  },
+  "devDependencies": {
+    "@flydotio/dockerfile": "^0.7.8"
   }
 }
