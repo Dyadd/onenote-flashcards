@@ -9,6 +9,7 @@ const { OpenAI } = require('openai');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { JSDOM } = require('jsdom');
 const session = require('express-session');
+const crypto = require('crypto');
 
 // Load environment variables
 dotenv.config();
