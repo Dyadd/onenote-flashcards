@@ -1,5 +1,5 @@
-// Enhanced client-side app.js for OneNote Flashcards with OAuth support
-// Optimized for large note collections and better UX with comprehensive logging
+// OneNote Flashcards with Anki Features
+// Complete implementation with spaced repetition, statistics, and all advanced features
 
 // State management
 let currentNotebookId = '';
@@ -8,901 +8,3243 @@ let allFlashcards = {};
 let currentPageId = '';
 let currentCardIndex = 0;
 let isSyncing = false;
-let syncProgress = { total: 0, processed: 0 };
-let isAuthenticated = false;
-let userName = '';
+let autoAdvanceTimer = null;
+let userStudyStats = {};
+let userSettings = {};
+let tagList = [];
+let activeFilters = {
+    tags: [],
+    difficulty: 'all',
+    status: 'all'
+};
+let studyStartTime = null;
+let studySession = {
+    active: false,
+    queue: [],
+    currentIndex: 0
+};
 
-// Update your temporary setupEventListeners function to include just the login button handlers
+// Card scheduling constants (Anki-like algorithms)
+const EASE_FACTOR_DEFAULT = 2.5;
+const EASE_MODIFIER_HARD = 0.85;
+const EASE_MODIFIER_GOOD = 1.0;
+const EASE_MODIFIER_EASY = 1.3;
+const INTERVAL_MODIFIER = 1.0;
+const NEW_INTERVAL_HARD = 0.6; // 60% of previous interval
+const MIN_INTERVAL = 1; // 1 day minimum
+const MAX_INTERVAL = 365 * 4; // 4 years maximum
 
-function setupEventListeners() {
-  console.log('Setting up critical event listeners');
-  
-  // Authentication buttons
-  const loginButton = document.getElementById('login-button');
-  if (loginButton) {
-    console.log('Setting up login button');
-    loginButton.addEventListener('click', () => {
-      console.log('Login button clicked, redirecting to /auth/signin');
-      window.location.href = '/auth/signin';
-    });
-  } else {
-    console.error('Login button not found');
-  }
-  
-  const loginButtonMain = document.getElementById('login-button-main');
-  if (loginButtonMain) {
-    console.log('Setting up main login button');
-    loginButtonMain.addEventListener('click', () => {
-      console.log('Main login button clicked, redirecting to /auth/signin');
-      window.location.href = '/auth/signin';
-    });
-  } else {
-    console.error('Main login button not found');
-  }
-}
-
-// DOM Elements
+// Initialize app when DOM is fully loaded
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('DOM fully loaded, initializing application...');
-  // Initialize UI elements only after DOM is fully loaded
-  initializeUI();
-  init();
+    console.log('DOM loaded, initializing application...');
+    init();
 });
 
-// Initialize UI elements with logging
-function initializeUI() {
-  console.log('Initializing UI elements...');
-  
-  // Authentication elements
-  window.authStatus = document.getElementById('auth-status');
-  window.loginButton = document.getElementById('login-button');
-  window.loginButtonMain = document.getElementById('login-button-main');
-  window.logoutButton = document.getElementById('logout-button');
-  window.userInfo = document.getElementById('user-info');
-  
-  // Main navigation elements
-  window.notebookSelect = document.getElementById('notebook-select');
-  window.sectionSelect = document.getElementById('section-select');
-  window.syncButton = document.getElementById('sync-button');
-  window.fullSyncButton = document.getElementById('full-sync-button');
-  window.syncStatus = document.getElementById('sync-status');
-  
-  // Pages list and flashcard elements
-  window.pagesList = document.getElementById('pages-list');
-  window.searchInput = document.getElementById('search-input');
-  window.currentPageTitle = document.getElementById('current-page-title');
-  window.cardCounter = document.getElementById('card-counter');
-  window.flashcardElement = document.getElementById('flashcard');
-  window.questionElement = document.getElementById('question');
-  window.answerElement = document.getElementById('answer');
-  
-  // Control buttons
-  window.prevButton = document.getElementById('prev-button');
-  window.nextButton = document.getElementById('next-button');
-  window.toggleButton = document.getElementById('toggle-button');
-  window.progressBar = document.getElementById('sync-progress');
-  
-  // Login section and content section
-  window.loginSection = document.getElementById('login-section');
-  window.contentSection = document.getElementById('content-section');
-  
-  // Log any missing elements that could cause issues
-  const criticalElements = [
-    { name: 'loginSection', element: window.loginSection },
-    { name: 'contentSection', element: window.contentSection },
-    { name: 'notebookSelect', element: window.notebookSelect },
-    { name: 'sectionSelect', element: window.sectionSelect },
-    { name: 'pagesList', element: window.pagesList }
-  ];
-  
-  criticalElements.forEach(item => {
-    if (!item.element) {
-      console.error(`Critical UI element not found: ${item.name}`);
+// Main initialization function
+async function init() {
+    console.log('Initializing application...');
+    try {
+        // Load user settings
+        loadUserSettings();
+        
+        // Check authentication status first
+        const authStatus = await checkAuthStatus();
+        console.log(`Auth status: ${authStatus.authenticated ? 'Authenticated' : 'Not authenticated'}`);
+        
+        // Setup all event listeners
+        setupEventListeners();
+        
+        // If authenticated, load user content
+        if (authStatus.authenticated) {
+            console.log('User is authenticated, loading content...');
+            await loadUserData();
+            showContentSection();
+            
+            // Load study stats
+            loadStudyStats();
+            
+            // Update stats display
+            updateStatsDisplay();
+            
+            // Update heatmap
+            updateHeatmap();
+            
+            // Apply spaced repetition UI based on settings
+            toggleSpacedRepetitionUI();
+            
+            // Load and display due counts
+            updateDueCounts();
+        } else {
+            console.log('User is not authenticated, showing login screen');
+            showLoginSection();
+        }
+        
+        // Check URL for direct flashcard access
+        checkUrlParameters();
+        
+        console.log('Initialization complete');
+    } catch (error) {
+        console.error('Initialization error:', error);
+        showNotification('Error initializing app. Please refresh the page.', true);
     }
+}
+
+// Load user settings from localStorage
+function loadUserSettings() {
+    try {
+        const savedSettings = localStorage.getItem('userSettings');
+        if (savedSettings) {
+            userSettings = JSON.parse(savedSettings);
+        } else {
+            // Default settings
+            userSettings = {
+                newCardsPerDay: 20,
+                reviewsPerDay: 100,
+                showImages: true,
+                useSpacedRepetition: true,
+                autoplayAudio: false,
+                nightMode: false,
+                cardOrderNew: 'due', // 'due', 'random', 'added'
+                cardOrderReview: 'due' // 'due', 'random'
+            };
+            saveUserSettings();
+        }
+        
+        // Apply settings to UI
+        applyUserSettings();
+    } catch (error) {
+        console.error('Error loading user settings:', error);
+        // Reset to defaults if error
+        userSettings = {
+            newCardsPerDay: 20,
+            reviewsPerDay: 100,
+            showImages: true,
+            useSpacedRepetition: true,
+            autoplayAudio: false,
+            nightMode: false,
+            cardOrderNew: 'due',
+            cardOrderReview: 'due'
+        };
+    }
+}
+
+// Save user settings to localStorage
+function saveUserSettings() {
+    try {
+        localStorage.setItem('userSettings', JSON.stringify(userSettings));
+    } catch (error) {
+        console.error('Error saving user settings:', error);
+    }
+}
+
+// Apply settings to UI
+function applyUserSettings() {
+    // Apply night mode if enabled
+    if (userSettings.nightMode) {
+        document.body.classList.add('night-mode');
+    } else {
+        document.body.classList.remove('night-mode');
+    }
+    
+    // Update settings panel inputs to match current settings
+    const nightModeToggle = document.getElementById('night-mode-toggle');
+    const newCardsInput = document.getElementById('new-cards-per-day');
+    const reviewsInput = document.getElementById('reviews-per-day');
+    const spacedRepToggle = document.getElementById('spaced-rep-toggle');
+    const autoplayToggle = document.getElementById('autoplay-toggle');
+    const newCardOrderSelect = document.getElementById('new-card-order');
+    const reviewCardOrderSelect = document.getElementById('review-card-order');
+    
+    if (nightModeToggle) nightModeToggle.checked = userSettings.nightMode;
+    if (newCardsInput) newCardsInput.value = userSettings.newCardsPerDay;
+    if (reviewsInput) reviewsInput.value = userSettings.reviewsPerDay;
+    if (spacedRepToggle) spacedRepToggle.checked = userSettings.useSpacedRepetition;
+    if (autoplayToggle) autoplayToggle.checked = userSettings.autoplayAudio;
+    if (newCardOrderSelect) newCardOrderSelect.value = userSettings.cardOrderNew;
+    if (reviewCardOrderSelect) reviewCardOrderSelect.value = userSettings.cardOrderReview;
+}
+
+// Load study statistics from localStorage
+function loadStudyStats() {
+    try {
+        const savedStats = localStorage.getItem('userStudyStats');
+        if (savedStats) {
+            userStudyStats = JSON.parse(savedStats);
+        } else {
+            // Initialize empty stats
+            userStudyStats = {
+                cardsStudied: 0,
+                totalReviews: 0,
+                correctReviews: 0,
+                studyTimeMinutes: 0,
+                streakDays: 0,
+                lastStudyDate: null,
+                reviewHistory: [],
+                deckStats: {}
+            };
+            saveStudyStats();
+        }
+        
+        // Update streak
+        updateStudyStreak();
+    } catch (error) {
+        console.error('Error loading study stats:', error);
+        userStudyStats = {
+            cardsStudied: 0,
+            totalReviews: 0,
+            correctReviews: 0,
+            studyTimeMinutes: 0,
+            streakDays: 0,
+            lastStudyDate: null,
+            reviewHistory: [],
+            deckStats: {}
+        };
+    }
+}
+
+// Save study statistics to localStorage
+function saveStudyStats() {
+    try {
+        localStorage.setItem('userStudyStats', JSON.stringify(userStudyStats));
+    } catch (error) {
+        console.error('Error saving study stats:', error);
+    }
+}
+
+// Update study streak based on last study date
+function updateStudyStreak() {
+    const today = new Date().toISOString().split('T')[0];
+    const lastStudyDate = userStudyStats.lastStudyDate;
+    
+    if (lastStudyDate) {
+        // Already studied today
+        if (lastStudyDate === today) {
+            return;
+        }
+        
+        // Check if studied yesterday
+        const yesterdayDate = new Date();
+        yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+        const yesterday = yesterdayDate.toISOString().split('T')[0];
+        
+        if (lastStudyDate === yesterday) {
+            // Studied yesterday, increment streak
+            userStudyStats.streakDays++;
+        } else {
+            // Streak broken
+            userStudyStats.streakDays = 1;
+        }
+    } else {
+        // First time studying
+        userStudyStats.streakDays = 1;
+    }
+    
+    userStudyStats.lastStudyDate = today;
+    saveStudyStats();
+}
+
+// Record a card review in study statistics
+function recordCardReview(cardIndex, pageId, result) {
+    // Update global stats
+    userStudyStats.totalReviews++;
+    
+    if (result === 'good' || result === 'easy') {
+        userStudyStats.correctReviews++;
+    }
+    
+    const card = allFlashcards[pageId]?.cards[cardIndex];
+    if (!card) return;
+    
+    // If first time seeing this card, increment cardsStudied
+    if (!card.reviewCount || card.reviewCount === 0) {
+        userStudyStats.cardsStudied++;
+    }
+    
+    // Add to review history
+    userStudyStats.reviewHistory.push({
+        date: new Date().toISOString(),
+        cardIndex: cardIndex,
+        pageId: pageId,
+        result: result
+    });
+    
+    // Ensure history doesn't grow too large (keep last 1000 reviews)
+    if (userStudyStats.reviewHistory.length > 1000) {
+        userStudyStats.reviewHistory = userStudyStats.reviewHistory.slice(-1000);
+    }
+    
+    // Update deck/page stats
+    if (!userStudyStats.deckStats[pageId]) {
+        userStudyStats.deckStats[pageId] = {
+            cardsStudied: 0,
+            totalReviews: 0,
+            correctReviews: 0
+        };
+    }
+    
+    userStudyStats.deckStats[pageId].totalReviews++;
+    
+    if (result === 'good' || result === 'easy') {
+        userStudyStats.deckStats[pageId].correctReviews++;
+    }
+    
+    // If first time seeing this card in this deck, increment cardsStudied
+    if (!card.reviewCount || card.reviewCount === 0) {
+        userStudyStats.deckStats[pageId].cardsStudied++;
+    }
+    
+    // Update streak
+    updateStudyStreak();
+    
+    // Save stats
+    saveStudyStats();
+    
+    // Update stats display
+    updateStatsDisplay();
+    
+    // Update heatmap
+    updateHeatmap();
+}
+
+// Update the stats display in the UI
+function updateStatsDisplay() {
+    const statsContainer = document.getElementById('stats-container');
+    if (!statsContainer) return;
+    
+    // Calculate retention rate
+    const retentionRate = userStudyStats.totalReviews > 0 
+        ? (userStudyStats.correctReviews / userStudyStats.totalReviews * 100).toFixed(1) 
+        : 0;
+    
+    // Count due cards
+    const { dueCount, newCount, totalCount } = getDueCounts();
+    
+    statsContainer.innerHTML = `
+        <div class="stats-row">
+            <div class="stat-item">
+                <div class="stat-value">${userStudyStats.cardsStudied}</div>
+                <div class="stat-label">Cards Learned</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">${userStudyStats.totalReviews}</div>
+                <div class="stat-label">Reviews</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">${retentionRate}%</div>
+                <div class="stat-label">Retention</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">${userStudyStats.streakDays}</div>
+                <div class="stat-label">Day Streak</div>
+            </div>
+        </div>
+        <div class="stats-row mt-3">
+            <div class="stat-item">
+                <div class="stat-value">${dueCount}</div>
+                <div class="stat-label">Due Today</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">${newCount}</div>
+                <div class="stat-label">New Cards</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">${totalCount}</div>
+                <div class="stat-label">Total Cards</div>
+            </div>
+        </div>
+    `;
+    
+    // Update detailed stats modal
+    updateDetailedStats();
+}
+
+// Update the detailed statistics modal
+function updateDetailedStats() {
+    const detailedStatsContainer = document.getElementById('detailed-stats-container');
+    if (!detailedStatsContainer) return;
+    
+    // Calculate retention rate
+    const retentionRate = userStudyStats.totalReviews > 0 
+        ? (userStudyStats.correctReviews / userStudyStats.totalReviews * 100).toFixed(1) 
+        : 0;
+    
+    // Calculate reviews per day
+    const reviewDays = new Set(userStudyStats.reviewHistory.map(r => r.date.split('T')[0])).size;
+    const averageReviews = reviewDays > 0 
+        ? (userStudyStats.totalReviews / reviewDays).toFixed(1) 
+        : 0;
+    
+    // Format review history for chart
+    const reviewByDay = {};
+    userStudyStats.reviewHistory.forEach(review => {
+        const day = review.date.split('T')[0];
+        if (!reviewByDay[day]) {
+            reviewByDay[day] = { total: 0, correct: 0 };
+        }
+        reviewByDay[day].total++;
+        if (review.result === 'good' || review.result === 'easy') {
+            reviewByDay[day].correct++;
+        }
+    });
+    
+    // Get deck-specific stats
+    const deckStats = Object.entries(userStudyStats.deckStats).map(([pageId, stats]) => {
+        const deckName = allFlashcards[pageId]?.pageTitle || 'Unknown Deck';
+        const deckRetention = stats.totalReviews > 0 
+            ? (stats.correctReviews / stats.totalReviews * 100).toFixed(1) 
+            : 0;
+        
+        return {
+            deckName,
+            cardsStudied: stats.cardsStudied,
+            totalReviews: stats.totalReviews,
+            retention: deckRetention
+        };
+    });
+    
+    // Build HTML for detailed stats
+    let deckStatsHtml = '';
+    if (deckStats.length > 0) {
+        deckStatsHtml = `
+            <div class="table-responsive mt-4">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Deck</th>
+                            <th>Cards</th>
+                            <th>Reviews</th>
+                            <th>Retention</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${deckStats.map(deck => `
+                            <tr>
+                                <td>${deck.deckName}</td>
+                                <td>${deck.cardsStudied}</td>
+                                <td>${deck.totalReviews}</td>
+                                <td>${deck.retention}%</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+    
+    // Create HTML for detailed stats
+    detailedStatsContainer.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">Overview</h5>
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <div class="text-muted">Total Cards Studied</div>
+                                    <div class="h3">${userStudyStats.cardsStudied}</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <div class="text-muted">Total Reviews</div>
+                                    <div class="h3">${userStudyStats.totalReviews}</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <div class="text-muted">Retention Rate</div>
+                                    <div class="h3">${retentionRate}%</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <div class="text-muted">Day Streak</div>
+                                    <div class="h3">${userStudyStats.streakDays}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">Study Habits</h5>
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <div class="text-muted">Study Days</div>
+                                    <div class="h3">${reviewDays}</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <div class="text-muted">Reviews per Day</div>
+                                    <div class="h3">${averageReviews}</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <div class="text-muted">Study Time (mins)</div>
+                                    <div class="h3">${userStudyStats.studyTimeMinutes || 0}</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <div class="text-muted">Last Study</div>
+                                    <div class="h3">${userStudyStats.lastStudyDate ? formatDate(new Date(userStudyStats.lastStudyDate)) : 'Never'}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">Activity</h5>
+                        <div class="detailed-heatmap mb-3">
+                            <!-- Detailed heatmap would go here (using a library in production) -->
+                            <div id="detailed-heatmap-placeholder" class="mb-3 p-3 bg-light text-center">
+                                <i class="bi bi-calendar-week me-2"></i>Study activity heatmap
+                            </div>
+                        </div>
+                        <h5 class="card-title">Deck Statistics</h5>
+                        ${deckStatsHtml || '<p class="text-muted">No deck statistics available yet</p>'}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Helper function to format date
+function formatDate(date) {
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+// Get counts of due and new cards
+function getDueCounts() {
+    const today = new Date();
+    let dueCount = 0;
+    let newCount = 0;
+    let totalCount = 0;
+    
+    Object.values(allFlashcards).forEach(page => {
+        if (!page.cards) return;
+        
+        totalCount += page.cards.length;
+        
+        page.cards.forEach(card => {
+            if (!card) return;
+            
+            if (card.suspended) return; // Skip suspended cards
+            
+            if (!card.due) {
+                // Card has never been reviewed
+                newCount++;
+            } else {
+                // Check if card is due
+                const dueDate = new Date(card.due);
+                if (dueDate <= today) {
+                    dueCount++;
+                }
+            }
+        });
+    });
+    
+    return { dueCount, newCount, totalCount };
+}
+
+// Update due counts in the UI
+function updateDueCounts() {
+    const { dueCount, newCount } = getDueCounts();
+    const totalDue = dueCount + newCount;
+    
+    // Update study now button
+    const studyNowButton = document.getElementById('study-now-button');
+    if (studyNowButton) {
+        if (totalDue > 0) {
+            studyNowButton.innerHTML = `<i class="bi bi-play-fill me-1"></i>Study (${totalDue})`;
+            studyNowButton.disabled = false;
+        } else {
+            studyNowButton.innerHTML = `<i class="bi bi-play-fill me-1"></i>Study`;
+            studyNowButton.disabled = false; // Still allow study if no due cards
+        }
+    }
+    
+    // Update stats display
+    updateStatsDisplay();
+}
+
+// Update the heatmap visualization
+function updateHeatmap() {
+    const heatmapContainer = document.getElementById('heatmap-container');
+    if (!heatmapContainer) return;
+    
+    // Get review history
+    const reviewHistory = userStudyStats.reviewHistory || [];
+    
+    // Count reviews per day for the last 365 days
+    const reviewCounts = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Initialize all dates for the last year
+    for (let i = 0; i < 365; i++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        reviewCounts[dateStr] = 0;
+    }
+    
+    // Count reviews per day
+    reviewHistory.forEach(review => {
+        const dateStr = review.date.split('T')[0];
+        if (reviewCounts[dateStr] !== undefined) {
+            reviewCounts[dateStr]++;
+        }
+    });
+    
+    // Create heatmap cells for the last 7 days
+    const lastWeekContainer = document.createElement('div');
+    lastWeekContainer.className = 'heatmap-week';
+    
+    for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        const count = reviewCounts[dateStr] || 0;
+        
+        const cell = document.createElement('div');
+        cell.className = 'heatmap-cell';
+        cell.dataset.date = dateStr;
+        cell.dataset.count = count;
+        cell.classList.add(getHeatmapColorClass(count));
+        cell.title = `${formatDate(date)}: ${count} reviews`;
+        
+        lastWeekContainer.appendChild(cell);
+    }
+    
+    // Clear and update heatmap
+    heatmapContainer.innerHTML = '<h6 class="mb-3">Activity</h6>';
+    heatmapContainer.appendChild(lastWeekContainer);
+    
+    // Add a section for month view (last 30 days)
+    const monthContainer = document.createElement('div');
+    monthContainer.className = 'heatmap-month mt-2';
+    
+    for (let i = 29; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        const count = reviewCounts[dateStr] || 0;
+        
+        const cell = document.createElement('div');
+        cell.className = 'heatmap-cell';
+        cell.dataset.date = dateStr;
+        cell.dataset.count = count;
+        cell.classList.add(getHeatmapColorClass(count));
+        cell.title = `${formatDate(date)}: ${count} reviews`;
+        
+        monthContainer.appendChild(cell);
+    }
+    
+    heatmapContainer.appendChild(monthContainer);
+}
+
+// Get color class for heatmap based on count
+function getHeatmapColorClass(count) {
+    if (count === 0) return 'heat-0';
+    if (count < 5) return 'heat-1';
+    if (count < 10) return 'heat-2';
+    if (count < 20) return 'heat-3';
+    return 'heat-4';
+}
+
+// Check if user is authenticated
+async function checkAuthStatus() {
+    console.log('Checking authentication status...');
+    try {
+        const response = await fetch('/api/auth/status');
+        
+        if (!response.ok) {
+            throw new Error(`Auth check failed: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        updateAuthUI(data.authenticated, data.userName);
+        return data;
+    } catch (error) {
+        console.error('Auth check error:', error);
+        updateAuthUI(false);
+        return { authenticated: false };
+    }
+}
+
+// Update UI based on authentication status
+function updateAuthUI(isAuthenticated, userName = '') {
+    console.log(`Updating auth UI: authenticated=${isAuthenticated}, user=${userName}`);
+    
+    const authStatus = document.getElementById('auth-status');
+    const userInfo = document.getElementById('user-info');
+    const loginButton = document.getElementById('login-button');
+    const logoutButton = document.getElementById('logout-button');
+    
+    if (isAuthenticated) {
+        if (authStatus) authStatus.textContent = 'Signed In';
+        if (userInfo) userInfo.textContent = userName;
+        if (loginButton) loginButton.style.display = 'none';
+        if (logoutButton) logoutButton.style.display = 'block';
+    } else {
+        if (authStatus) authStatus.textContent = 'Not Signed In';
+        if (userInfo) userInfo.textContent = '';
+        if (loginButton) loginButton.style.display = 'block';
+        if (logoutButton) logoutButton.style.display = 'none';
+    }
+}
+
+// Show login or content section
+function showLoginSection() {
+    const loginSection = document.getElementById('login-section');
+    const contentSection = document.getElementById('content-section');
+    
+    if (loginSection) loginSection.style.display = 'block';
+    if (contentSection) contentSection.style.display = 'none';
+}
+
+function showContentSection() {
+    const loginSection = document.getElementById('login-section');
+    const contentSection = document.getElementById('content-section');
+    
+    if (loginSection) loginSection.style.display = 'none';
+    if (contentSection) contentSection.style.display = 'block';
+}
+
+// Setup all event listeners
+function setupEventListeners() {
+    console.log('Setting up event listeners');
+    
+    // Authentication buttons
+    setupAuthButtons();
+    
+    // Notebook and section selection
+    setupSelectionListeners();
+    
+    // Sync buttons
+    setupSyncButtons();
+    
+    // Search functionality
+    setupSearchListeners();
+    
+    // Flashcard navigation
+    setupFlashcardControls();
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', handleKeyPress);
+    
+    // Auto-advance feature
+    setupAutoAdvance();
+    
+    // Share button
+    setupShareButton();
+    
+    // Settings panel
+    setupSettingsPanel();
+    
+    // Tags filter
+    setupTagsFilter();
+    
+    // Study options
+    setupStudyOptions();
+    
+    // Batch editing
+    setupBatchEditing();
+    
+    // Card editor
+    setupCardEditor();
+    
+    // Stats and help modals
+    setupModals();
+}
+
+function setupAuthButtons() {
+    // Main login button
+    const loginButtonMain = document.getElementById('login-button-main');
+    if (loginButtonMain) {
+        loginButtonMain.addEventListener('click', () => {
+            window.location.href = '/auth/signin';
+        });
+    }
+    
+    // Navbar login button
+    const loginButton = document.getElementById('login-button');
+    if (loginButton) {
+        loginButton.addEventListener('click', () => {
+            window.location.href = '/auth/signin';
+        });
+    }
+    
+    // Logout button
+    const logoutButton = document.getElementById('logout-button');
+    if (logoutButton) {
+        logoutButton.addEventListener('click', () => {
+            window.location.href = '/auth/signout';
+        });
+    }
+}
+
+function setupSelectionListeners() {
+    // Notebook selection
+    const notebookSelect = document.getElementById('notebook-select');
+    if (notebookSelect) {
+        notebookSelect.addEventListener('change', async function() {
+            const notebookId = this.value;
+            if (!notebookId) return;
+            
+            currentNotebookId = notebookId;
+            currentSectionId = '';
+            
+            // Disable sync buttons until section is selected
+            const syncButton = document.getElementById('sync-button');
+            const fullSyncButton = document.getElementById('full-sync-button');
+            if (syncButton) syncButton.disabled = true;
+            if (fullSyncButton) fullSyncButton.disabled = true;
+            
+            // Load sections for selected notebook
+            await loadSections(notebookId);
+        });
+    }
+    
+    // Section selection
+    const sectionSelect = document.getElementById('section-select');
+    if (sectionSelect) {
+        sectionSelect.addEventListener('change', function() {
+            const sectionId = this.value;
+            if (!sectionId) return;
+            
+            currentSectionId = sectionId;
+            
+            // Enable sync buttons
+            const syncButton = document.getElementById('sync-button');
+            const fullSyncButton = document.getElementById('full-sync-button');
+            if (syncButton) syncButton.disabled = false;
+            if (fullSyncButton) fullSyncButton.disabled = false;
+            
+            // Save selection for future visits
+            saveSelection();
+        });
+    }
+}
+
+function setupSyncButtons() {
+    // Quick sync button
+    const syncButton = document.getElementById('sync-button');
+    if (syncButton) {
+        syncButton.addEventListener('click', () => {
+            if (currentNotebookId && currentSectionId) {
+                syncSection(currentNotebookId, currentSectionId);
+            } else {
+                showNotification('Please select a notebook and section first', true);
+            }
+        });
+    }
+    
+    // Full sync button
+    const fullSyncButton = document.getElementById('full-sync-button');
+    if (fullSyncButton) {
+        fullSyncButton.addEventListener('click', () => {
+            if (currentNotebookId && currentSectionId) {
+                fullSync(currentNotebookId, currentSectionId);
+            } else {
+                showNotification('Please select a notebook and section first', true);
+            }
+        });
+    }
+}
+
+function setupSearchListeners() {
+  // Search input
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) {
+      searchInput.addEventListener('input', function() {
+          filterPages(this.value);
+      });
+  }
+  
+  // Clear search button
+  const clearSearch = document.getElementById('clear-search');
+  if (clearSearch) {
+      clearSearch.addEventListener('click', function() {
+          const searchInput = document.getElementById('search-input');
+          if (searchInput) {
+              searchInput.value = '';
+              filterPages('');
+          }
+      });
+  }
+}
+
+function setupFlashcardControls() {
+  // Previous button
+  const prevButton = document.getElementById('prev-button');
+  if (prevButton) {
+      prevButton.addEventListener('click', showPreviousCard);
+  }
+  
+  // Next button
+  const nextButton = document.getElementById('next-button');
+  if (nextButton) {
+      nextButton.addEventListener('click', showNextCard);
+  }
+  
+  // Toggle answer button
+  const toggleButton = document.getElementById('toggle-button');
+  if (toggleButton) {
+      toggleButton.addEventListener('click', toggleAnswer);
+  }
+  
+  // Answer buttons (for spaced repetition)
+  const againButton = document.getElementById('answer-again');
+  if (againButton) {
+      againButton.addEventListener('click', () => answerCard('again'));
+  }
+  
+  const hardButton = document.getElementById('answer-hard');
+  if (hardButton) {
+      hardButton.addEventListener('click', () => answerCard('hard'));
+  }
+  
+  const goodButton = document.getElementById('answer-good');
+  if (goodButton) {
+      goodButton.addEventListener('click', () => answerCard('good'));
+  }
+  
+  const easyButton = document.getElementById('answer-easy');
+  if (easyButton) {
+      easyButton.addEventListener('click', () => answerCard('easy'));
+  }
+  
+  // Study mode controls
+  const studyShowAnswerBtn = document.getElementById('study-show-answer');
+  if (studyShowAnswerBtn) {
+      studyShowAnswerBtn.addEventListener('click', showStudyAnswer);
+  }
+  
+  // Study answer buttons
+  const studyAgainBtn = document.getElementById('study-again');
+  if (studyAgainBtn) {
+      studyAgainBtn.addEventListener('click', () => answerStudyCard('again'));
+  }
+  
+  const studyHardBtn = document.getElementById('study-hard');
+  if (studyHardBtn) {
+      studyHardBtn.addEventListener('click', () => answerStudyCard('hard'));
+  }
+  
+  const studyGoodBtn = document.getElementById('study-good');
+  if (studyGoodBtn) {
+      studyGoodBtn.addEventListener('click', () => answerStudyCard('good'));
+  }
+  
+  const studyEasyBtn = document.getElementById('study-easy');
+  if (studyEasyBtn) {
+      studyEasyBtn.addEventListener('click', () => answerStudyCard('easy'));
+  }
+  
+  // Exit study mode button
+  const exitStudyBtn = document.getElementById('exit-study-mode');
+  if (exitStudyBtn) {
+      exitStudyBtn.addEventListener('click', exitStudyMode);
+  }
+  
+  // Return to decks button (study completion)
+  const returnToDecksBtn = document.getElementById('return-to-decks');
+  if (returnToDecksBtn) {
+      returnToDecksBtn.addEventListener('click', exitStudyMode);
+  }
+  
+  // Edit card button
+  const editCardButton = document.getElementById('edit-card-button');
+  if (editCardButton) {
+      editCardButton.addEventListener('click', () => {
+          if (currentPageId && currentCardIndex !== null) {
+              openCardEditor(currentPageId, currentCardIndex);
+          }
+      });
+  }
+}
+
+function setupAutoAdvance() {
+  const autoAdvanceCheckbox = document.getElementById('auto-advance');
+  if (autoAdvanceCheckbox) {
+      autoAdvanceCheckbox.addEventListener('change', function() {
+          if (this.checked) {
+              startAutoAdvance();
+          } else {
+              stopAutoAdvance();
+          }
+      });
+  }
+}
+
+function setupShareButton() {
+  const shareButton = document.getElementById('share-link');
+  if (shareButton) {
+      shareButton.addEventListener('click', function() {
+          if (!currentPageId) return;
+          
+          const shareableUrl = getShareableUrl(currentPageId);
+          navigator.clipboard.writeText(shareableUrl)
+              .then(() => showNotification('Link copied to clipboard!'))
+              .catch(() => showNotification('Failed to copy link', true));
+      });
+  }
+}
+
+function setupSettingsPanel() {
+  // Settings toggle button
+  const settingsToggle = document.getElementById('settings-toggle');
+  if (settingsToggle) {
+      settingsToggle.addEventListener('click', toggleSettingsPanel);
+  }
+  
+  // Settings close button
+  const settingsClose = document.getElementById('settings-close');
+  if (settingsClose) {
+      settingsClose.addEventListener('click', toggleSettingsPanel);
+  }
+  
+  // Night mode toggle
+  const nightModeToggle = document.getElementById('night-mode-toggle');
+  if (nightModeToggle) {
+      nightModeToggle.checked = userSettings.nightMode;
+      nightModeToggle.addEventListener('change', function() {
+          userSettings.nightMode = this.checked;
+          saveUserSettings();
+          applyUserSettings();
+      });
+  }
+  
+  // New cards per day input
+  const newCardsInput = document.getElementById('new-cards-per-day');
+  if (newCardsInput) {
+      newCardsInput.value = userSettings.newCardsPerDay;
+      newCardsInput.addEventListener('change', function() {
+          const value = parseInt(this.value);
+          if (value > 0) {
+              userSettings.newCardsPerDay = value;
+              saveUserSettings();
+          }
+      });
+  }
+  
+  // Reviews per day input
+  const reviewsInput = document.getElementById('reviews-per-day');
+  if (reviewsInput) {
+      reviewsInput.value = userSettings.reviewsPerDay;
+      reviewsInput.addEventListener('change', function() {
+          const value = parseInt(this.value);
+          if (value > 0) {
+              userSettings.reviewsPerDay = value;
+              saveUserSettings();
+          }
+      });
+  }
+  
+  // Spaced repetition toggle
+  const spacedRepToggle = document.getElementById('spaced-rep-toggle');
+  if (spacedRepToggle) {
+      spacedRepToggle.checked = userSettings.useSpacedRepetition;
+      spacedRepToggle.addEventListener('change', function() {
+          userSettings.useSpacedRepetition = this.checked;
+          saveUserSettings();
+          
+          // Show/hide spaced rep buttons based on setting
+          toggleSpacedRepetitionUI();
+      });
+  }
+  
+  // Autoplay audio toggle
+  const autoplayToggle = document.getElementById('autoplay-toggle');
+  if (autoplayToggle) {
+      autoplayToggle.checked = userSettings.autoplayAudio;
+      autoplayToggle.addEventListener('change', function() {
+          userSettings.autoplayAudio = this.checked;
+          saveUserSettings();
+      });
+  }
+  
+  // Card order selects
+  const newCardOrderSelect = document.getElementById('new-card-order');
+  if (newCardOrderSelect) {
+      newCardOrderSelect.value = userSettings.cardOrderNew;
+      newCardOrderSelect.addEventListener('change', function() {
+          userSettings.cardOrderNew = this.value;
+          saveUserSettings();
+      });
+  }
+  
+  const reviewCardOrderSelect = document.getElementById('review-card-order');
+  if (reviewCardOrderSelect) {
+      reviewCardOrderSelect.value = userSettings.cardOrderReview;
+      reviewCardOrderSelect.addEventListener('change', function() {
+          userSettings.cardOrderReview = this.value;
+          saveUserSettings();
+      });
+  }
+  
+  // Reset settings button
+  const resetSettingsBtn = document.getElementById('reset-settings');
+  if (resetSettingsBtn) {
+      resetSettingsBtn.addEventListener('click', function() {
+          if (confirm('Reset all settings to defaults?')) {
+              userSettings = {
+                  newCardsPerDay: 20,
+                  reviewsPerDay: 100,
+                  showImages: true,
+                  useSpacedRepetition: true,
+                  autoplayAudio: false,
+                  nightMode: false,
+                  cardOrderNew: 'due',
+                  cardOrderReview: 'due'
+              };
+              saveUserSettings();
+              applyUserSettings();
+              showNotification('Settings reset to defaults');
+          }
+      });
+  }
+}
+
+function toggleSettingsPanel() {
+  const settingsPanel = document.getElementById('settings-panel');
+  if (settingsPanel) {
+      settingsPanel.classList.toggle('settings-panel-visible');
+  }
+}
+
+function toggleSpacedRepetitionUI() {
+  const answerButtonsContainer = document.getElementById('answer-buttons-container');
+  const standardButtonsContainer = document.getElementById('standard-buttons-container');
+  
+  if (userSettings.useSpacedRepetition) {
+      if (answerButtonsContainer) answerButtonsContainer.style.display = 'flex';
+      if (standardButtonsContainer) standardButtonsContainer.style.display = 'none';
+  } else {
+      if (answerButtonsContainer) answerButtonsContainer.style.display = 'none';
+      if (standardButtonsContainer) standardButtonsContainer.style.display = 'flex';
+  }
+}
+
+function setupTagsFilter() {
+  // Populate tag list for filter
+  const tagFilterContainer = document.getElementById('tag-filter-container');
+  if (tagFilterContainer) {
+      updateTagFilterList();
+      
+      // Tag filter clear button
+      const clearTagsButton = document.getElementById('clear-tags-filter');
+      if (clearTagsButton) {
+          clearTagsButton.addEventListener('click', () => {
+              activeFilters.tags = [];
+              updateTagFilterDisplay();
+              filterPages();
+          });
+      }
+  }
+  
+  // Tag select dropdown
+  const tagSelect = document.getElementById('tag-filter');
+  if (tagSelect) {
+      tagSelect.addEventListener('change', function() {
+          const selectedTag = this.value;
+          if (selectedTag && !activeFilters.tags.includes(selectedTag)) {
+              activeFilters.tags.push(selectedTag);
+              this.value = ''; // Reset select
+              updateTagFilterDisplay();
+              filterPages();
+          }
+      });
+  }
+  
+  // Difficulty filter
+  const difficultyFilter = document.getElementById('difficulty-filter');
+  if (difficultyFilter) {
+      difficultyFilter.addEventListener('change', function() {
+          activeFilters.difficulty = this.value;
+          filterPages();
+      });
+  }
+  
+  // Status filter
+  const statusFilter = document.getElementById('status-filter');
+  if (statusFilter) {
+      statusFilter.addEventListener('change', function() {
+          activeFilters.status = this.value;
+          filterPages();
+      });
+  }
+}
+
+function updateTagFilterList() {
+  // Get all tags from all cards
+  tagList = [];
+  
+  Object.values(allFlashcards).forEach(page => {
+      if (!page.cards) return;
+      
+      page.cards.forEach(card => {
+          if (card && card.tags && Array.isArray(card.tags)) {
+              card.tags.forEach(tag => {
+                  if (!tagList.includes(tag)) {
+                      tagList.push(tag);
+                  }
+              });
+          }
+      });
   });
   
-  console.log('UI elements initialization complete');
-}
-
-// Initialize app with detailed logging
-async function init() {
-  console.log('Initializing application...');
-  try {
-    // Check authentication status first
-    console.log('Checking authentication status...');
-    await checkAuthStatus();
-    console.log(`Authentication status: ${isAuthenticated ? 'Authenticated' : 'Not authenticated'}`);
-    
-    // Setup event listeners
-    console.log('Setting up event listeners...');
-    setupEventListeners();
-    
-    // If authenticated, load content
-    if (isAuthenticated) {
-      console.log('User is authenticated, loading user data...');
-      await loadUserData();
-    } else {
-      console.log('User is not authenticated, displaying login screen');
-    }
-    
-    // Check URL parameters for direct flashcard access
-    console.log('Checking URL parameters for direct access...');
-    checkUrlParams();
-    
-    console.log('Initialization complete');
-  } catch (error) {
-    console.error('Initialization error:', error);
-    showNotification('Error initializing app. Please refresh the page.', true);
-  }
-}
-
-// Check if user is authenticated with detailed logging
-async function checkAuthStatus() {
-  console.log('Making request to /api/auth/status...');
-  try {
-    const response = await fetch('/api/auth/status');
-    console.log('Auth status response received:', response.status);
-    
-    if (!response.ok) {
-      console.error('Auth status check failed with status:', response.status);
-      throw new Error(`Auth status check failed: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    console.log('Auth status data:', data);
-    
-    isAuthenticated = data.authenticated;
-    userName = data.userName;
-    
-    console.log(`Auth check result: authenticated=${isAuthenticated}, userName=${userName}`);
-    updateAuthUI();
-    return data;
-  } catch (error) {
-    console.error('Error checking auth status:', error);
-    isAuthenticated = false;
-    updateAuthUI();
-    throw error;
-  }
-}
-
-// Update UI based on authentication status with logging
-function updateAuthUI() {
-  console.log(`Updating UI based on authentication status: ${isAuthenticated}`);
+  // Sort tags alphabetically
+  tagList.sort();
   
-  if (isAuthenticated) {
-    // Show authenticated UI
-    console.log('Showing authenticated UI');
-    if (loginSection) {
-      loginSection.style.display = 'none';
-      console.log('Hide login section');
-    } else {
-      console.error('Login section element not found');
-    }
-    
-    if (contentSection) {
-      contentSection.style.display = 'block';
-      console.log('Show content section');
-    } else {
-      console.error('Content section element not found');
-    }
-    
-    if (loginButton) loginButton.style.display = 'none';
-    if (logoutButton) logoutButton.style.display = 'block';
-    if (userInfo) userInfo.textContent = userName || 'User';
-    if (authStatus) authStatus.textContent = 'Signed In';
-  } else {
-    // Show non-authenticated UI
-    console.log('Showing non-authenticated UI');
-    if (loginSection) {
-      loginSection.style.display = 'block';
-      console.log('Show login section');
-    } else {
-      console.error('Login section element not found');
-    }
-    
-    if (contentSection) {
-      contentSection.style.display = 'none';
-      console.log('Hide content section');
-    } else {
-      console.error('Content section element not found');
-    }
-    
-    if (loginButton) loginButton.style.display = 'block';
-    if (logoutButton) logoutButton.style.display = 'none';
-    if (userInfo) userInfo.textContent = '';
-    if (authStatus) authStatus.textContent = 'Not Signed In';
+  // Update tag filter dropdown
+  const tagSelect = document.getElementById('tag-filter');
+  if (tagSelect) {
+      tagSelect.innerHTML = '<option value="">Filter by tag...</option>';
+      
+      tagList.forEach(tag => {
+          const option = document.createElement('option');
+          option.value = tag;
+          option.textContent = tag;
+          tagSelect.appendChild(option);
+      });
+  }
+}
+
+function updateTagFilterDisplay() {
+  const activeTagsContainer = document.getElementById('active-tags-container');
+  if (!activeTagsContainer) return;
+  
+  activeTagsContainer.innerHTML = '';
+  
+  activeFilters.tags.forEach(tag => {
+      const tagElement = document.createElement('span');
+      tagElement.className = 'badge bg-secondary me-1 mb-1 tag-item';
+      tagElement.textContent = tag;
+      
+      // Add remove button
+      const removeButton = document.createElement('span');
+      removeButton.className = 'tag-remove ms-1';
+      removeButton.innerHTML = '&times;';
+      removeButton.addEventListener('click', () => {
+          activeFilters.tags = activeFilters.tags.filter(t => t !== tag);
+          updateTagFilterDisplay();
+          filterPages();
+      });
+      
+      tagElement.appendChild(removeButton);
+      activeTagsContainer.appendChild(tagElement);
+  });
+}
+
+function setupStudyOptions() {
+  // Custom study button
+  const customStudyButton = document.getElementById('custom-study-button');
+  if (customStudyButton) {
+      customStudyButton.addEventListener('click', () => {
+          const customStudyModal = new bootstrap.Modal(document.getElementById('custom-study-modal'));
+          customStudyModal.show();
+      });
   }
   
-  console.log('UI update complete');
+  // Study now button
+  const studyNowButton = document.getElementById('study-now-button');
+  if (studyNowButton) {
+      studyNowButton.addEventListener('click', () => {
+          // Start study with default options (all due cards)
+          startStudySession(true, true, userSettings.reviewsPerDay + userSettings.newCardsPerDay, []);
+      });
+  }
+  
+  // Start custom study button
+  const startCustomStudyBtn = document.getElementById('start-custom-study');
+  if (startCustomStudyBtn) {
+      startCustomStudyBtn.addEventListener('click', () => {
+          // Get options from modal
+          const newCardsOption = document.getElementById('custom-study-new');
+          const reviewCardsOption = document.getElementById('custom-study-review');
+          const limitInput = document.getElementById('custom-study-limit');
+          const tagsInput = document.getElementById('custom-study-tags');
+          
+          const includeNew = newCardsOption ? newCardsOption.checked : true;
+          const includeDue = reviewCardsOption ? reviewCardsOption.checked : true;
+          const limit = limitInput && limitInput.value ? parseInt(limitInput.value) : 50;
+          const tags = tagsInput && tagsInput.value ? 
+              tagsInput.value.split(',').map(t => t.trim()).filter(t => t) : [];
+          
+          // Start study with custom options
+          startStudySession(includeDue, includeNew, limit, tags);
+          
+          // Hide modal
+          const customStudyModal = bootstrap.Modal.getInstance(document.getElementById('custom-study-modal'));
+          if (customStudyModal) {
+              customStudyModal.hide();
+          }
+      });
+  }
 }
 
-// Load user data (notebooks, flashcards) with detailed logging
+function setupBatchEditing() {
+  // Batch edit button
+  const batchEditButton = document.getElementById('batch-edit-button');
+  if (batchEditButton) {
+      batchEditButton.addEventListener('click', enableBatchEditMode);
+  }
+  
+  // Apply batch edits button
+  const applyBatchEditsButton = document.getElementById('apply-batch-edits');
+  if (applyBatchEditsButton) {
+      applyBatchEditsButton.addEventListener('click', applyBatchEdits);
+  }
+  
+  // Cancel batch edits button
+  const cancelBatchEditsButton = document.getElementById('cancel-batch-edits');
+  if (cancelBatchEditsButton) {
+      cancelBatchEditsButton.addEventListener('click', cancelBatchEdits);
+  }
+  
+  // Select all button
+  const selectAllButton = document.getElementById('select-all-batch');
+  if (selectAllButton) {
+      selectAllButton.addEventListener('click', () => {
+          const checkboxes = document.querySelectorAll('.batch-select');
+          checkboxes.forEach(checkbox => checkbox.checked = true);
+      });
+  }
+  
+  // Deselect all button
+  const deselectAllButton = document.getElementById('deselect-all-batch');
+  if (deselectAllButton) {
+      deselectAllButton.addEventListener('click', () => {
+          const checkboxes = document.querySelectorAll('.batch-select');
+          checkboxes.forEach(checkbox => checkbox.checked = false);
+      });
+  }
+  
+  // Done button
+  const doneButton = document.getElementById('batch-edit-done');
+  if (doneButton) {
+      doneButton.addEventListener('click', cancelBatchEdits);
+  }
+}
+
+function setupCardEditor() {
+  // Save card edits button
+  const saveCardEditsBtn = document.getElementById('save-card-edits');
+  if (saveCardEditsBtn) {
+      saveCardEditsBtn.addEventListener('click', saveCardEdits);
+  }
+  
+  // Cancel card edits button
+  const cancelCardEditsBtn = document.getElementById('cancel-card-edits');
+  if (cancelCardEditsBtn) {
+      cancelCardEditsBtn.addEventListener('click', () => {
+          closeCardEditor();
+      });
+  }
+}
+
+function setupModals() {
+  // Detailed stats modal
+  const statsModal = document.getElementById('stats-modal');
+  if (statsModal) {
+      statsModal.addEventListener('show.bs.modal', () => {
+          updateDetailedStats();
+      });
+  }
+}
+
+// Handle keyboard shortcuts
+function handleKeyPress(e) {
+  // Skip if in any input field
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+      return;
+  }
+  
+  // Skip if modifiers are pressed
+  if (e.ctrlKey || e.altKey || e.metaKey) {
+      return;
+  }
+  
+  // Check if in study mode
+  const studyMode = document.getElementById('study-mode-content');
+  const inStudyMode = studyMode && studyMode.style.display !== 'none';
+  
+  if (inStudyMode) {
+      handleStudyModeKeyPress(e);
+      return;
+  }
+  
+  // Only process if we have cards loaded
+  if (!currentPageId || !allFlashcards[currentPageId]) return;
+  
+  switch(e.key) {
+      case 'ArrowLeft':
+          showPreviousCard();
+          e.preventDefault();
+          break;
+      case 'ArrowRight':
+          showNextCard();
+          e.preventDefault();
+          break;
+      case ' ':
+          toggleAnswer();
+          e.preventDefault(); // Prevent scrolling
+          break;
+      case '1':
+          if (userSettings.useSpacedRepetition && document.getElementById('answer-again')) {
+              answerCard('again');
+              e.preventDefault();
+          }
+          break;
+      case '2':
+          if (userSettings.useSpacedRepetition && document.getElementById('answer-hard')) {
+              answerCard('hard');
+              e.preventDefault();
+          }
+          break;
+      case '3':
+          if (userSettings.useSpacedRepetition && document.getElementById('answer-good')) {
+              answerCard('good');
+              e.preventDefault();
+          }
+          break;
+      case '4':
+          if (userSettings.useSpacedRepetition && document.getElementById('answer-easy')) {
+              answerCard('easy');
+              e.preventDefault();
+          }
+          break;
+  }
+}
+
+function handleStudyModeKeyPress(e) {
+  // Get study mode elements
+  const answerHidden = document.getElementById('study-answer').classList.contains('hidden');
+  const showAnswerBtn = document.getElementById('study-show-answer');
+  
+  switch(e.key) {
+      case ' ':
+          if (answerHidden && showAnswerBtn) {
+              showStudyAnswer();
+          } else {
+              // If answer is showing, pressing space should go to next card with "good" rating
+              answerStudyCard('good');
+          }
+          e.preventDefault();
+          break;
+      case '1':
+          if (!answerHidden) {
+              answerStudyCard('again');
+              e.preventDefault();
+          }
+          break;
+      case '2':
+          if (!answerHidden) {
+              answerStudyCard('hard');
+              e.preventDefault();
+          }
+          break;
+      case '3':
+          if (!answerHidden) {
+              answerStudyCard('good');
+              e.preventDefault();
+          }
+          break;
+      case '4':
+          if (!answerHidden) {
+              answerStudyCard('easy');
+              e.preventDefault();
+          }
+          break;
+      case 'Escape':
+          exitStudyMode();
+          e.preventDefault();
+          break;
+  }
+}
+
+// Load user data (notebooks and flashcards)
 async function loadUserData() {
   console.log('Loading user data...');
   try {
-    console.log('Loading notebooks...');
-    await loadNotebooks();
-    
-    console.log('Loading flashcards...');
-    await loadFlashcards();
-    
-    // Check for last selected notebook/section
-    console.log('Loading last selection...');
-    loadLastSelection();
-    
-    console.log('User data loaded successfully');
-  } catch (error) {
-    console.error('Error loading user data:', error);
-    
-    // If unauthorized, redirect to login
-    if (error.status === 401) {
-      console.log('Authentication required, redirecting to login');
-      window.location.href = '/auth/signin';
-    } else {
-      showNotification('Error loading your data. Please try again.', true);
-    }
-  }
-}
-
-// Helper functions for UI with logging
-function showLoading(message) {
-  console.log(`Showing loading indicator: ${message}`);
-  const loadingElement = document.getElementById('loading-indicator');
-  if (loadingElement) {
-    loadingElement.textContent = message || 'Loading...';
-    loadingElement.style.display = 'block';
-  } else {
-    console.error('Loading indicator element not found');
-  }
-}
-
-function hideLoading() {
-  console.log('Hiding loading indicator');
-  const loadingElement = document.getElementById('loading-indicator');
-  if (loadingElement) {
-    loadingElement.style.display = 'none';
-  } else {
-    console.error('Loading indicator element not found');
-  }
-}
-
-function showNotification(message, isError = false) {
-  console.log(`Showing notification: ${message}, isError: ${isError}`);
-  const notification = document.getElementById('notification') || createNotificationElement();
-  notification.textContent = message;
-  notification.className = `notification ${isError ? 'error' : 'success'}`;
-  notification.style.display = 'block';
-  
-  // Auto-hide after 3 seconds
-  setTimeout(() => {
-    notification.style.display = 'none';
-  }, 3000);
-}
-
-function createNotificationElement() {
-  console.log('Creating notification element');
-  const notification = document.createElement('div');
-  notification.id = 'notification';
-  notification.className = 'notification';
-  document.body.appendChild(notification);
-  return notification;
-}
-
-function updateSyncStatus(message) {
-  console.log(`Updating sync status: ${message}`);
-  if (syncStatus) {
-    syncStatus.textContent = message;
-  } else {
-    console.error('Sync status element not found');
-  }
-}
-
-function updateButtons(disableAll) {
-  console.log(`Updating buttons, disableAll: ${disableAll}`);
-  const buttons = document.querySelectorAll('button');
-  buttons.forEach(button => {
-    if (disableAll) {
-      button.setAttribute('data-previous-state', button.disabled ? 'true' : 'false');
-      button.disabled = true;
-    } else {
-      const prevState = button.getAttribute('data-previous-state');
-      if (prevState !== null) {
-        button.disabled = prevState === 'true';
-        button.removeAttribute('data-previous-state');
-      }
-    }
-  });
-}
-
-// Initialize auto-advance feature with logging
-let autoAdvanceTimer = null;
-
-function setupAutoAdvance() {
-  console.log('Setting up auto-advance feature');
-  const autoAdvanceCheckbox = document.getElementById('auto-advance');
-  if (!autoAdvanceCheckbox) {
-    console.error('Auto-advance checkbox not found');
-    return;
-  }
-  
-  autoAdvanceCheckbox.addEventListener('change', function() {
-    if (this.checked) {
-      console.log('Auto-advance enabled');
-      startAutoAdvance();
-    } else {
-      console.log('Auto-advance disabled');
-      stopAutoAdvance();
-    }
-  });
-}
-
-function startAutoAdvance() {
-  console.log('Starting auto-advance');
-  // Stop any existing timer
-  stopAutoAdvance();
-  
-  // Set delay based on user preference (default 7 seconds)
-  const delayElement = document.getElementById('auto-advance-delay');
-  const delay = parseInt(delayElement?.value || 7) * 1000;
-  console.log(`Auto-advance delay: ${delay}ms`);
-  
-  autoAdvanceTimer = setInterval(() => {
-    // If answer is showing, move to next card
-    if (!answerElement.classList.contains('hidden')) {
-      if (!nextButton.disabled) {
-        console.log('Auto-advance: moving to next card');
-        nextButton.click();
-      } else {
-        // Reached the end, stop auto-advance
-        console.log('Auto-advance: reached the end, stopping');
-        stopAutoAdvance();
-        const checkbox = document.getElementById('auto-advance');
-        if (checkbox) checkbox.checked = false;
-      }
-    } else {
-      // If answer is hidden, show it
-      console.log('Auto-advance: showing answer');
-      toggleButton.click();
-    }
-  }, delay);
-}
-
-function stopAutoAdvance() {
-  if (autoAdvanceTimer) {
-    console.log('Stopping auto-advance timer');
-    clearInterval(autoAdvanceTimer);
-    autoAdvanceTimer = null;
-  }
-}
-
-// Load saved user selections with logging
-function loadLastSelection() {
-  console.log('Loading last notebook/section selection');
-  const savedSelection = localStorage.getItem('lastSelection');
-  if (savedSelection) {
-    try {
-      const { notebookId, sectionId } = JSON.parse(savedSelection);
-      console.log(`Found saved selection: notebookId=${notebookId}, sectionId=${sectionId}`);
+      // Show loading indicator
+      showLoading('Loading notebooks...');
       
-      if (notebookId) {
-        if (notebookSelect) {
-          console.log(`Setting notebook select to ${notebookId}`);
-          notebookSelect.value = notebookId;
-          loadSections(notebookId).then(() => {
-            if (sectionId) {
-              console.log(`Setting section select to ${sectionId}`);
-              if (sectionSelect) {
-                sectionSelect.value = sectionId;
-                currentSectionId = sectionId;
-                currentNotebookId = notebookId;
-                
-                if (syncButton) syncButton.disabled = false;
-                if (fullSyncButton) fullSyncButton.disabled = false;
-              } else {
-                console.error('Section select element not found');
-              }
-            }
-          });
-        } else {
-          console.error('Notebook select element not found');
-        }
+      // Load notebooks first
+      await loadNotebooks();
+      
+      // Check if we have cached flashcards in localStorage
+      const cachedFlashcards = loadFlashcardsFromLocalStorage();
+      if (cachedFlashcards) {
+          console.log('Using cached flashcards from localStorage');
+          allFlashcards = cachedFlashcards;
+          
+          // Update UI with cached data
+          updateTagFilterList();
+          renderPagesList();
       }
-    } catch (e) {
-      console.error('Error loading last selection:', e);
-    }
-  } else {
-    console.log('No saved selection found');
-  }
-}
-
-// Save user selections with logging
-function saveSelection() {
-  if (currentNotebookId && currentSectionId) {
-    console.log(`Saving selection: notebookId=${currentNotebookId}, sectionId=${currentSectionId}`);
-    localStorage.setItem('lastSelection', JSON.stringify({
-      notebookId: currentNotebookId,
-      sectionId: currentSectionId
-    }));
-  } else {
-    console.log('Not saving selection - incomplete notebook/section data');
-  }
-}
-
-// Check URL parameters for direct access with logging
-function checkUrlParams() {
-  console.log('Checking URL parameters');
-  const urlParams = new URLSearchParams(window.location.search);
-  const pageId = urlParams.get('page');
-  console.log(`URL parameter 'page': ${pageId}`);
-  
-  if (pageId) {
-    console.log(`Page ID found in URL: ${pageId}`);
-    
-    if (allFlashcards && allFlashcards[pageId]) {
-      console.log(`Found flashcards for page ${pageId}, selecting page`);
-      selectPage(pageId);
-    } else {
-      console.log(`No flashcards found for page ${pageId}`);
-    }
-  } else {
-    console.log('No page ID in URL parameters');
-  }
-}
-
-// Generate shareable URL for a flashcard set with logging
-function getShareableUrl(pageId) {
-  const baseUrl = window.location.origin + window.location.pathname;
-  const url = `${baseUrl}?page=${pageId}`;
-  console.log(`Generated shareable URL: ${url}`);
-  return url;
-}
-
-// Handle error responses from fetch requests with logging
-async function handleFetchResponse(response) {
-  console.log(`Handling fetch response, status: ${response.status}`);
-  
-  if (response.status === 401 || response.status === 403) {
-    // Authentication issue
-    console.log('Authentication required (401/403), redirecting to login');
-    window.location.href = '/auth/signin';
-    throw { status: response.status, message: 'Authentication required' };
-  }
-  
-  if (!response.ok) {
-    console.error(`Error response: ${response.status} ${response.statusText}`);
-    let errorData;
-    try {
-      errorData = await response.json();
-      console.error('Error data:', errorData);
-    } catch (e) {
-      console.error('Could not parse error response as JSON');
-      errorData = { error: 'Unknown error' };
-    }
-    
-    throw { 
-      status: response.status, 
-      message: errorData.error || `Error: ${response.status} ${response.statusText}`
-    };
-  }
-  
-  console.log('Response OK, parsing JSON');
-  return response.json();
-}
-
-// Load notebooks from API with detailed logging
-async function loadNotebooks() {
-  console.log('Loading notebooks from API');
-  try {
-    showLoading('Loading notebooks...');
-    console.log('Making request to /api/notebooks');
-    const response = await fetch('/api/notebooks');
-    
-    console.log(`Notebooks response status: ${response.status}`);
-    // Handle authentication errors
-    if (response.status === 401) {
-      // Redirect to login page
-      console.log('Authentication required (401), redirecting to login');
-      window.location.href = '/auth/signin';
-      throw { status: 401, message: 'Authentication required' };
-    }
-    
-    if (!response.ok) {
-      console.error(`Error loading notebooks: ${response.status} ${response.statusText}`);
-      let errorData;
-      try {
-        errorData = await response.json();
-        console.error('Error data:', errorData);
-      } catch (e) {
-        console.error('Could not parse error response as JSON');
-        errorData = { error: 'Failed to fetch notebooks' };
-      }
-      throw new Error(errorData.error || 'Failed to fetch notebooks');
-    }
-    
-    const notebooks = await response.json();
-    console.log(`Received ${notebooks.length} notebooks`);
-    
-    if (notebookSelect) {
-      console.log('Populating notebook select dropdown');
-      notebookSelect.innerHTML = '<option value="">Select a notebook</option>';
-      notebooks.forEach(notebook => {
-          console.log(`Adding notebook: ${notebook.displayName} (${notebook.id})`);
-          const option = document.createElement('option');
-          option.value = notebook.id;
-          option.textContent = notebook.displayName;
-          notebookSelect.appendChild(option);
-      });
-    } else {
-      console.error('Notebook select element not found');
-    }
-    
-    hideLoading();
-    return notebooks;
+      
+      // Then load all flashcards from server
+      await loadFlashcards();
+      
+      // Load last selection from local storage
+      loadLastSelection();
+      
+      // Hide loading indicator
+      hideLoading();
+      
+      console.log('User data loaded successfully');
   } catch (error) {
-    console.error('Error loading notebooks:', error);
-    if (error.status !== 401) { // Don't show notification for auth errors
-      showNotification('Failed to load notebooks. Please try again.', true);
-    }
-    hideLoading();
-    throw error;
+      console.error('Error loading user data:', error);
+      hideLoading();
+      
+      // If unauthorized, redirect to login
+      if (error.status === 401) {
+          window.location.href = '/auth/signin';
+      } else {
+          showNotification('Error loading your data. Please try again.', true);
+      }
   }
 }
 
-// Load sections for selected notebook with detailed logging
+// Load notebooks from API
+async function loadNotebooks() {
+  console.log('Loading notebooks...');
+  try {
+      const response = await fetch('/api/notebooks');
+      
+      // Handle authentication errors
+      if (response.status === 401) {
+          window.location.href = '/auth/signin';
+          throw { status: 401, message: 'Authentication required' };
+      }
+      
+      if (!response.ok) {
+          throw new Error(`Failed to fetch notebooks: ${response.status}`);
+      }
+      
+      const notebooks = await response.json();
+      console.log(`Loaded ${notebooks.length} notebooks`);
+      
+      // Populate notebook dropdown
+      const notebookSelect = document.getElementById('notebook-select');
+      if (notebookSelect) {
+          notebookSelect.innerHTML = '<option value="">Select a notebook</option>';
+          
+          notebooks.forEach(notebook => {
+              const option = document.createElement('option');
+              option.value = notebook.id;
+              option.textContent = notebook.displayName;
+              notebookSelect.appendChild(option);
+          });
+      }
+      
+      return notebooks;
+  } catch (error) {
+      console.error('Error loading notebooks:', error);
+      throw error;
+  }
+}
+
+// Load sections for selected notebook
 async function loadSections(notebookId) {
   console.log(`Loading sections for notebook: ${notebookId}`);
   try {
-    if (!notebookId) {
-      console.log('No notebook ID provided, skipping section load');
-      return;
-    }
-    
-    showLoading('Loading sections...');
-    console.log(`Making request to /api/notebooks/${notebookId}/sections`);
-    const response = await fetch(`/api/notebooks/${notebookId}/sections`);
-    
-    console.log(`Sections response status: ${response.status}`);
-    if (!response.ok) {
-      console.error(`Error loading sections: ${response.status} ${response.statusText}`);
+      if (!notebookId) return;
+      
+      showLoading('Loading sections...');
+      
+      const response = await fetch(`/api/notebooks/${notebookId}/sections`);
+      
       if (response.status === 401) {
-        console.log('Authentication required (401), redirecting to login');
-        window.location.href = '/auth/signin';
-        throw { status: 401, message: 'Authentication required' };
+          window.location.href = '/auth/signin';
+          throw { status: 401, message: 'Authentication required' };
       }
-      throw new Error('Failed to fetch sections');
-    }
-    
-    const sections = await response.json();
-    console.log(`Received ${sections.length} sections`);
-    
-    if (sectionSelect) {
-      console.log('Populating section select dropdown');
-      sectionSelect.innerHTML = '<option value="">Select a section</option>';
-      sections.forEach(section => {
-          console.log(`Adding section: ${section.displayName} (${section.id})`);
-          const option = document.createElement('option');
-          option.value = section.id;
-          option.textContent = section.displayName;
-          sectionSelect.appendChild(option);
-      });
-    } else {
-      console.error('Section select element not found');
-    }
-    
-    hideLoading();
-    return sections;
-  } catch (error) {
-    console.error('Error loading sections:', error);
-    if (error.status !== 401) {
-      showNotification('Failed to load sections. Please try again.', true);
-    }
-    hideLoading();
-    throw error;
-  }
-}
-
-// Sync section flashcards (incremental) with detailed logging
-async function syncSection(notebookId, sectionId) {
-  console.log(`Syncing section: notebookId=${notebookId}, sectionId=${sectionId}`);
-  if (isSyncing) {
-    console.log('Sync already in progress, aborting');
-    showNotification('Sync already in progress. Please wait.');
-    return;
-  }
-  
-  try {
-    isSyncing = true;
-    updateSyncStatus('Syncing...');
-    updateButtons(true);
-    
-    if (syncButton) syncButton.disabled = true;
-    if (fullSyncButton) fullSyncButton.disabled = true;
-    
-    console.log(`Making request to /api/sync/section/${sectionId}`);
-    const response = await fetch(`/api/sync/section/${sectionId}`, {
-      method: 'POST'
-    });
-    
-    console.log(`Sync response status: ${response.status}`);
-    // Handle response with common error handler
-    const result = await handleFetchResponse(response);
-    console.log('Sync result:', result);
-    
-    if (result.success) {
-      console.log(`Sync complete, updated ${result.cardsUpdated} flashcards`);
-      console.log('Reloading flashcards after sync');
-      await loadFlashcards();
-      showNotification(`Sync complete! Updated ${result.cardsUpdated} flashcards.`);
       
-      // Save last sync info
-      console.log('Saving last sync info');
-      saveLastSyncInfo(notebookId, sectionId);
-    } else {
-      console.error('Sync failed:', result);
-      showNotification('Sync failed. Please try again.', true);
-    }
-  } catch (error) {
-    console.error('Error syncing section:', error);
-    if (error.status !== 401) { // Don't show notification for auth errors
-      showNotification('Failed to sync. Please try again.', true);
-    }
-  } finally {
-    console.log('Sync operation complete');
-    isSyncing = false;
-    updateSyncStatus('');
-    updateButtons(false);
-    if (syncButton) syncButton.disabled = false;
-    if (fullSyncButton) fullSyncButton.disabled = false;
-  }
-}
-
-// Perform full sync (for large note collections) with detailed logging
-async function fullSync(notebookId, sectionId) {
-  console.log(`Full sync requested: notebookId=${notebookId}, sectionId=${sectionId}`);
-  if (isSyncing) {
-    console.log('Sync already in progress, aborting');
-    showNotification('Sync already in progress. Please wait.');
-    return;
-  }
-  
-  try {
-    // Confirm because this can take a while
-    console.log('Prompting for confirmation');
-    if (!confirm('Full sync may take several minutes for large note collections. Continue?')) {
-      console.log('User cancelled full sync');
-      return;
-    }
-    
-    isSyncing = true;
-    updateSyncStatus('Performing full sync...');
-    updateButtons(true);
-    
-    if (syncButton) syncButton.disabled = true;
-    if (fullSyncButton) fullSyncButton.disabled = true;
-    
-    // Request full sync
-    console.log(`Making request to /api/sync/full/${notebookId}/${sectionId}`);
-    const response = await fetch(`/api/sync/full/${notebookId}/${sectionId}`, {
-      method: 'POST'
-    });
-    
-    console.log(`Full sync response status: ${response.status}`);
-    // Handle response with common error handler
-    const result = await handleFetchResponse(response);
-    console.log('Full sync result:', result);
-    
-    if (result.success) {
-      console.log(`Full sync complete, created ${result.cardsUpdated} flashcards`);
-      console.log('Reloading flashcards after full sync');
-      await loadFlashcards();
-      showNotification(`Full sync complete! Created ${result.cardsUpdated} flashcards.`);
+      if (!response.ok) {
+          throw new Error(`Failed to fetch sections: ${response.status}`);
+      }
       
-      // Save last sync info
-      console.log('Saving last sync info');
-      saveLastSyncInfo(notebookId, sectionId);
-    } else {
-      console.error('Full sync failed:', result);
-      showNotification('Full sync failed. Please try again.', true);
-    }
+      const sections = await response.json();
+      console.log(`Loaded ${sections.length} sections`);
+      
+      // Populate sections dropdown
+      const sectionSelect = document.getElementById('section-select');
+      if (sectionSelect) {
+          sectionSelect.innerHTML = '<option value="">Select a section</option>';
+          
+          sections.forEach(section => {
+              const option = document.createElement('option');
+              option.value = section.id;
+              option.textContent = section.displayName;
+              sectionSelect.appendChild(option);
+          });
+      }
+      
+      hideLoading();
+      return sections;
   } catch (error) {
-    console.error('Error performing full sync:', error);
-    if (error.status !== 401) {
-      showNotification('Failed to perform full sync. Please try again.', true);
-    }
-  } finally {
-    console.log('Full sync operation complete');
-    isSyncing = false;
-    updateSyncStatus('');
-    updateButtons(false);
-    if (syncButton) syncButton.disabled = false;
-    if (fullSyncButton) fullSyncButton.disabled = false;
+      console.error('Error loading sections:', error);
+      hideLoading();
+      throw error;
   }
 }
 
-// Save last sync information with logging
-async function saveLastSyncInfo(notebookId, sectionId) {
-  console.log(`Saving last sync info: notebookId=${notebookId}, sectionId=${sectionId}`);
-  try {
-    console.log('Making request to /api/sync/save-last');
-    const response = await fetch('/api/sync/save-last', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ notebookId, sectionId })
-    });
-    
-    console.log(`Save sync info response status: ${response.status}`);
-    if (!response.ok) {
-      console.error(`Error saving sync info: ${response.status} ${response.statusText}`);
-    } else {
-      console.log('Last sync info saved successfully');
-    }
-  } catch (error) {
-    console.error('Error saving sync info:', error);
-  }
-}
-
-// Load all flashcards with detailed logging
+// Load all flashcards
 async function loadFlashcards() {
-  console.log('Loading flashcards from API');
+  console.log('Loading flashcards...');
   try {
-    showLoading('Loading flashcards...');
-    console.log('Making request to /api/flashcards');
-    const response = await fetch('/api/flashcards');
-    
-    console.log(`Flashcards response status: ${response.status}`);
-    // Handle response with common error handler
-    allFlashcards = await handleFetchResponse(response);
-    
-    const flashcardCount = Object.keys(allFlashcards).length;
-    console.log(`Received flashcards for ${flashcardCount} pages`);
-    if (flashcardCount > 0) {
-      console.log('First few flashcard pages:', Object.keys(allFlashcards).slice(0, 3));
-    }
-    
-    console.log('Rendering pages list');
-    renderPagesList();
-    hideLoading();
+      showLoading('Loading flashcards...');
+      
+      const response = await fetch('/api/flashcards');
+      
+      if (response.status === 401) {
+          window.location.href = '/auth/signin';
+          throw { status: 401, message: 'Authentication required' };
+      }
+      
+      if (!response.ok) {
+          throw new Error(`Failed to fetch flashcards: ${response.status}`);
+      }
+      
+      // Get flashcards from server
+      const serverFlashcards = await response.json();
+      const flashcardCount = Object.keys(serverFlashcards).length;
+      console.log(`Loaded flashcards for ${flashcardCount} pages from server`);
+      
+      // Merge with existing flashcards to preserve study data
+      if (Object.keys(allFlashcards).length > 0) {
+          // For each page from the server
+          Object.entries(serverFlashcards).forEach(([pageId, pageData]) => {
+              // If we already have this page, merge cards
+              if (allFlashcards[pageId]) {
+                  // Update page title and last updated
+                  allFlashcards[pageId].pageTitle = pageData.pageTitle;
+                  allFlashcards[pageId].lastUpdated = pageData.lastUpdated;
+                  
+                  // Store existing cards by question for fast lookup
+                  const existingCardsByQuestion = {};
+                  allFlashcards[pageId].cards.forEach((card, index) => {
+                      if (card && card.question) {
+                          existingCardsByQuestion[card.question] = { card, index };
+                      }
+                  });
+                  
+                  // Process each server card
+                  const updatedCards = [];
+                  pageData.cards.forEach(serverCard => {
+                      // Try to find matching card in local data
+                      const existingData = existingCardsByQuestion[serverCard.question];
+                      
+                      if (existingData) {
+                          // Preserve study data (interval, ease, due date, tags, etc.)
+                          serverCard.interval = existingData.card.interval || 0;
+                          serverCard.ease = existingData.card.ease || EASE_FACTOR_DEFAULT;
+                          serverCard.due = existingData.card.due || null;
+                          serverCard.reviewCount = existingData.card.reviewCount || 0;
+                          serverCard.tags = existingData.card.tags || [];
+                          serverCard.suspended = existingData.card.suspended || false;
+                      } else {
+                          // This is a new card, initialize study data
+                          serverCard.interval = 0;
+                          serverCard.ease = EASE_FACTOR_DEFAULT;
+                          serverCard.due = null;
+                          serverCard.reviewCount = 0;
+                          serverCard.tags = [];
+                          serverCard.suspended = false;
+                      }
+                      
+                      updatedCards.push(serverCard);
+                  });
+                  
+                  // Replace cards array with updated version
+                  allFlashcards[pageId].cards = updatedCards;
+                  
+              } else {
+                  // This is a new page, add it with initialized study data
+                  pageData.cards.forEach(card => {
+                      card.interval = 0;
+                      card.ease = EASE_FACTOR_DEFAULT;
+                      card.due = null;
+                      card.reviewCount = 0;
+                      card.tags = [];
+                      card.suspended = false;
+                  });
+                  
+                  allFlashcards[pageId] = pageData;
+              }
+          });
+      } else {
+          // First time loading, initialize all cards with study data
+          Object.entries(serverFlashcards).forEach(([pageId, pageData]) => {
+              if (pageData.cards) {
+                  pageData.cards.forEach(card => {
+                      card.interval = 0;
+                      card.ease = EASE_FACTOR_DEFAULT;
+                      card.due = null;
+                      card.reviewCount = 0;
+                      card.tags = [];
+                      card.suspended = false;
+                  });
+              } else {
+                  // Ensure cards array exists
+                  pageData.cards = [];
+              }
+          });
+          
+          allFlashcards = serverFlashcards;
+      }
+      
+      // Save merged flashcards to localStorage
+      saveFlashcardsToLocalStorage();
+      
+      // Update tag list
+      updateTagFilterList();
+      
+      // Update pages list
+      renderPagesList();
+      
+      // Update pages count badge
+      const pagesCount = document.getElementById('pages-count');
+      if (pagesCount) {
+          pagesCount.textContent = Object.keys(allFlashcards).length;
+      }
+      
+      // Update due counts
+      updateDueCounts();
+      
+      // Update stats display
+      updateStatsDisplay();
+      
+      // Update heatmap
+      updateHeatmap();
+      
+      hideLoading();
   } catch (error) {
-    console.error('Error loading flashcards:', error);
-    if (error.status !== 401) { // Don't show notification for auth errors
-      showNotification('Failed to load flashcards. Please try again.', true);
-    }
-    hideLoading();
+      console.error('Error loading flashcards:', error);
+      hideLoading();
+      throw error;
   }
 }
 
-// Filter pages by search term with logging
-function filterPages(searchTerm) {
-  console.log(`Filtering pages by search term: "${searchTerm}"`);
-  if (!searchTerm) {
-    console.log('Empty search term, showing all pages');
-    renderPagesList();
-    return;
-  }
+// Render list of pages with flashcards
+function renderPagesList(filteredPageIds) {
+  console.log('Rendering pages list');
+  const pagesList = document.getElementById('pages-list');
+  if (!pagesList) return;
   
-  searchTerm = searchTerm.toLowerCase();
+  // Clear the list
+  pagesList.innerHTML = '';
   
-  const allPageIds = Object.keys(allFlashcards);
-  console.log(`Filtering ${allPageIds.length} total pages`);
+  // Get page IDs - either filtered or all
+  const pageIds = filteredPageIds || Object.keys(allFlashcards);
   
-  const filteredPageIds = allPageIds.filter(pageId => {
-    const pageData = allFlashcards[pageId];
-    
-    // Check if page title matches
-    if (pageData.pageTitle.toLowerCase().includes(searchTerm)) {
-      return true;
-    }
-    
-    // Check if any flashcard content matches
-    return pageData.cards.some(card => 
-      card.question.toLowerCase().includes(searchTerm) || 
-      card.answer.toLowerCase().includes(searchTerm)
-    );
+  // Check if we have any pages
+  if (pageIds.length === 0) {
+      const emptyItem = document.createElement('li');
+      emptyItem.className = 'list-group-item text-center';
+      emptyItem.innerHTML = filteredPageIds 
+      ? '<i class="bi bi-search me-2"></i>No matching flashcards found.' 
+      : '<i class="bi bi-info-circle me-2"></i>No flashcards yet. Sync to create them.';
+  pagesList.appendChild(emptyItem);
+  return;
+}
+
+// Sort pages by title
+pageIds.sort((a, b) => {
+  const titleA = allFlashcards[a]?.pageTitle || '';
+  const titleB = allFlashcards[b]?.pageTitle || '';
+  return titleA.localeCompare(titleB);
+});
+
+// Add each page to the list
+pageIds.forEach(pageId => {
+  if (!allFlashcards[pageId]) return;
+  
+  const pageData = allFlashcards[pageId];
+  if (!pageData.cards) pageData.cards = [];
+  
+  // Count cards by status
+  let dueCount = 0;
+  let newCount = 0;
+  const today = new Date();
+  
+  pageData.cards.forEach(card => {
+      if (card.suspended) return; // Skip suspended cards
+      
+      if (!card.due) {
+          // New card
+          newCount++;
+      } else if (new Date(card.due) <= today) {
+          // Due card
+          dueCount++;
+      }
   });
   
-  console.log(`Found ${filteredPageIds.length} pages matching search term`);
-  renderPagesList(filteredPageIds);
+  const totalCards = pageData.cards.length;
+  
+  // Create list item
+  const listItem = document.createElement('li');
+  listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+  listItem.dataset.pageId = pageId;
+  
+  // Highlight current page
+  if (pageId === currentPageId) {
+      listItem.classList.add('active');
+  }
+  
+  // Create content div
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'd-flex flex-column';
+  
+  // Page title
+  const titleSpan = document.createElement('span');
+  titleSpan.className = 'page-title';
+  titleSpan.textContent = pageData.pageTitle;
+  contentDiv.appendChild(titleSpan);
+  
+  // Status badges (if have due/new cards)
+  if (dueCount > 0 || newCount > 0) {
+      const badgesDiv = document.createElement('div');
+      badgesDiv.className = 'mt-1';
+      
+      if (dueCount > 0) {
+          const dueBadge = document.createElement('span');
+          dueBadge.className = 'badge bg-info me-1';
+          dueBadge.textContent = `${dueCount} due`;
+          badgesDiv.appendChild(dueBadge);
+      }
+      
+      if (newCount > 0) {
+          const newBadge = document.createElement('span');
+          newBadge.className = 'badge bg-primary me-1';
+          newBadge.textContent = `${newCount} new`;
+          badgesDiv.appendChild(newBadge);
+      }
+      
+      contentDiv.appendChild(badgesDiv);
+  }
+  
+  // Total card count badge
+  const badge = document.createElement('span');
+  badge.className = 'badge bg-secondary rounded-pill';
+  badge.textContent = totalCards;
+  
+  // Last updated tooltip
+  if (pageData.lastUpdated) {
+      const lastUpdated = new Date(pageData.lastUpdated);
+      listItem.title = `Last updated: ${lastUpdated.toLocaleString()}`;
+  }
+  
+  // Add elements to list item
+  listItem.appendChild(contentDiv);
+  listItem.appendChild(badge);
+  
+  // Add click handler
+  listItem.addEventListener('click', () => selectPage(pageId));
+  
+  // Add to list
+  pagesList.appendChild(listItem);
+});
+
+// Show count of results
+const resultCount = document.createElement('div');
+resultCount.className = 'text-muted small mt-2';
+resultCount.textContent = `Showing ${pageIds.length} pages`;
+
+// Remove any existing count
+const existingCount = document.querySelector('.card-body .text-muted.small.mt-2');
+if (existingCount) {
+  existingCount.remove();
 }
 
-// Render pages list with flashcards with detailed logging
-function renderPagesList(specificPageIds) {
-    console.log('Rendering pages list');
-    if (!pagesList) {
-      console.error('Pages list element not found');
-      return;
-    }
-    
-    pagesList.innerHTML = '';
-    
-    // Use provided pageIds or all pages
-    const pageIds = specificPageIds || Object.keys(allFlashcards);
-    console.log(`Rendering ${pageIds.length} pages`);
-    
-    if (pageIds.length === 0) {
-        console.log('No pages to display');
-        const listItem = document.createElement('li');
-        listItem.className = 'list-group-item';
-        listItem.textContent = specificPageIds 
-            ? 'No matching flashcards found.' 
-            : 'No flashcards yet. Sync to create them.';
-        pagesList.appendChild(listItem);
-        return;
-    }
-    
-    // Sort pages by title for better organization
-    console.log('Sorting pages by title');
-    pageIds.sort((a, b) => {
-        const titleA = allFlashcards[a]?.pageTitle || '';
-        const titleB = allFlashcards[b]?.pageTitle || '';
-        return titleA.localeCompare(titleB);
-    });
-    
-    console.log('Adding page items to list');
-    pageIds.forEach(pageId => {
-        if (!allFlashcards[pageId]) {
-          console.warn(`Page ${pageId} not found in flashcards`);
-          return;
-        }
-        
-        const pageData = allFlashcards[pageId];
-        const cardCount = pageData.cards.length;
-        console.log(`Adding page: ${pageData.pageTitle} (${pageId}) with ${cardCount} cards`);
-        
-        const listItem = document.createElement('li');
-        listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
-        
-        // Highlight currently selected page
-        if (pageId === currentPageId) {
-            listItem.classList.add('active');
-            console.log(`Highlighting current page: ${pageId}`);
-        }
-        
-        const titleSpan = document.createElement('span');
-        titleSpan.className = 'page-title';
-        titleSpan.textContent = pageData.pageTitle;
-        
-        const badge = document.createElement('span');
-        badge.className = 'badge bg-primary rounded-pill';
-        badge.textContent = cardCount;
-        
-        // Add updated timestamp as tooltip
-        if (pageData.lastUpdated) {
-            const lastUpdated = new Date(pageData.lastUpdated);
-            listItem.title = `Last updated: ${lastUpdated.toLocaleString()}`;
-        }
-        
-        listItem.appendChild(titleSpan);
-        listItem.appendChild(badge);
-        listItem.addEventListener('click', () => selectPage(pageId));
-        
-        pagesList.appendChild(listItem);
-    });
-    
-    // Show count of results
-    console.log(`Showing count of ${pageIds.length} pages`);
-    const resultCountContainer = document.createElement('div');
-    resultCountContainer.className = 'text-muted small mt-2';
-    resultCountContainer.textContent = `Showing ${pageIds.length} pages`;
-    
-    // Remove any existing count before adding new one
-    const existingCount = pagesList.parentNode.querySelector('.text-muted.small.mt-2');
-    if (existingCount) {
-        console.log('Removing existing count element');
-        existingCount.remove();
-    }
-    
-    pagesList.parentNode.appendChild(resultCountContainer);
-    
-    // Update pages count badge if it exists
-    const pagesCount = document.getElementById('pages-count');
-    if (pagesCount) {
-        console.log(`Updating pages count badge: ${pageIds.length}`);
-        pagesCount.textContent = pageIds.length;
-    } else {
-        console.error('Pages count badge element not found');
-    }
-    
-    console.log('Finished rendering pages list');
+// Add count to container
+const container = pagesList.closest('.card-body');
+if (container) {
+  container.appendChild(resultCount);
 }
+}
+
+// Filter pages by search term and other filters
+function filterPages(searchTerm) {
+let filteredPageIds = Object.keys(allFlashcards);
+
+// Apply search term filter
+if (searchTerm) {
+  searchTerm = searchTerm.toLowerCase();
+  
+  filteredPageIds = filteredPageIds.filter(pageId => {
+      const pageData = allFlashcards[pageId];
+      
+      // Check if title matches
+      if (pageData.pageTitle.toLowerCase().includes(searchTerm)) {
+          return true;
+      }
+      
+      // Check if any card content matches
+      return pageData.cards.some(card => 
+          card.question.toLowerCase().includes(searchTerm) || 
+          card.answer.toLowerCase().includes(searchTerm)
+      );
+  });
+}
+
+// Apply tag filters
+if (activeFilters.tags.length > 0) {
+  filteredPageIds = filteredPageIds.filter(pageId => {
+      const pageData = allFlashcards[pageId];
+      
+      // Check if any card has all the required tags
+      return pageData.cards.some(card => {
+          if (!card.tags) return false;
+          
+          // Check if card has all required tags
+          return activeFilters.tags.every(tag => card.tags.includes(tag));
+      });
+  });
+}
+
+// Apply difficulty filter
+if (activeFilters.difficulty !== 'all') {
+  filteredPageIds = filteredPageIds.filter(pageId => {
+      const pageData = allFlashcards[pageId];
+      
+      // Filter based on difficulty (using ease factor as a proxy)
+      return pageData.cards.some(card => {
+          if (!card.ease) return false;
+          
+          switch (activeFilters.difficulty) {
+              case 'easy':
+                  return card.ease > 2.5;
+              case 'medium':
+                  return card.ease >= 2.0 && card.ease <= 2.5;
+              case 'hard':
+                  return card.ease < 2.0;
+              default:
+                  return true;
+          }
+      });
+  });
+}
+
+// Apply status filter
+if (activeFilters.status !== 'all') {
+  const today = new Date();
+  
+  filteredPageIds = filteredPageIds.filter(pageId => {
+      const pageData = allFlashcards[pageId];
+      
+      return pageData.cards.some(card => {
+          if (card.suspended) return false;
+          
+          switch (activeFilters.status) {
+              case 'due':
+                  return card.due && new Date(card.due) <= today;
+              case 'new':
+                  return !card.due;
+              case 'learned':
+                  return card.reviewCount && card.reviewCount > 0;
+              default:
+                  return true;
+          }
+      });
+  });
+}
+
+renderPagesList(filteredPageIds);
+}
+
+// Select a page and display its flashcards
+function selectPage(pageId) {
+console.log(`Selecting page: ${pageId}`);
+
+if (!allFlashcards[pageId]) {
+  console.error(`Page ${pageId} not found`);
+  return;
+}
+
+// Update current page and reset to first card
+currentPageId = pageId;
+currentCardIndex = 0;
+
+// Show edit and share buttons
+const shareLink = document.getElementById('share-link');
+if (shareLink) {
+  shareLink.style.display = 'inline-block';
+}
+
+const editCardButton = document.getElementById('edit-card-button');
+if (editCardButton) {
+  editCardButton.style.display = 'inline-block';
+}
+
+// Highlight selected page in list
+const pageItems = document.querySelectorAll('#pages-list li');
+pageItems.forEach(item => item.classList.remove('active'));
+
+const selectedItem = document.querySelector(`#pages-list li[data-page-id="${pageId}"]`);
+if (selectedItem) {
+  selectedItem.classList.add('active');
+  selectedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// Update page title
+const pageTitleEl = document.getElementById('current-page-title');
+if (pageTitleEl) {
+  pageTitleEl.textContent = allFlashcards[pageId].pageTitle;
+}
+
+// Show/hide auto-advance container
+const autoAdvanceContainer = document.getElementById('auto-advance-container');
+if (autoAdvanceContainer) {
+  const hasCards = allFlashcards[pageId].cards.length > 0;
+  autoAdvanceContainer.style.display = hasCards ? 'block' : 'none';
+}
+
+// Display first card
+displayCurrentCard();
+
+// Update URL for direct access
+const url = new URL(window.location);
+url.searchParams.set('page', pageId);
+window.history.replaceState({}, '', url);
+}
+
+// Display the current flashcard
+function displayCurrentCard() {
+if (!currentPageId || !allFlashcards[currentPageId]) return;
+
+const pageData = allFlashcards[currentPageId];
+if (!pageData.cards) pageData.cards = [];
+const cards = pageData.cards;
+
+// Get DOM elements
+const questionEl = document.getElementById('question');
+const answerEl = document.getElementById('answer');
+const cardCounter = document.getElementById('card-counter');
+const toggleButton = document.getElementById('toggle-button');
+const prevButton = document.getElementById('prev-button');
+const nextButton = document.getElementById('next-button');
+const cardTags = document.getElementById('card-tags');
+const cardDueDate = document.getElementById('card-due-date');
+const answerButtonsContainer = document.getElementById('answer-buttons-container');
+
+// Check if we have cards
+if (cards.length === 0) {
+  if (questionEl) questionEl.innerHTML = '<i class="bi bi-info-circle me-2"></i>No flashcards available for this page';
+  if (answerEl) {
+      answerEl.textContent = '';
+      answerEl.classList.add('hidden');
+  }
+  if (cardCounter) cardCounter.textContent = '0/0';
+  if (toggleButton) toggleButton.disabled = true;
+  if (prevButton) prevButton.disabled = true;
+  if (nextButton) nextButton.disabled = true;
+  if (cardTags) cardTags.innerHTML = '';
+  if (cardDueDate) cardDueDate.style.display = 'none';
+  if (answerButtonsContainer) answerButtonsContainer.style.display = 'none';
+  
+  const editCardButton = document.getElementById('edit-card-button');
+  if (editCardButton) editCardButton.style.display = 'none';
+  
+  return;
+}
+
+// Update card counter
+if (cardCounter) {
+  cardCounter.textContent = `${currentCardIndex + 1}/${cards.length}`;
+}
+
+// Get current card
+const card = cards[currentCardIndex];
+
+// Display tags
+if (cardTags) {
+  cardTags.innerHTML = '';
+  
+  if (card.tags && card.tags.length > 0) {
+      card.tags.forEach(tag => {
+          const tagEl = document.createElement('span');
+          tagEl.className = 'tag-item me-1';
+          tagEl.textContent = tag;
+          cardTags.appendChild(tagEl);
+      });
+  }
+}
+
+// Display due date if available
+if (cardDueDate) {
+  if (card.due) {
+      const dueDate = new Date(card.due);
+      const today = new Date();
+      
+      // Check if due today, overdue, or future
+      let dueClass = 'text-muted';
+      if (dueDate <= today) {
+          dueClass = 'text-danger'; // Overdue or due today
+      }
+      
+      cardDueDate.textContent = `Due: ${formatDate(dueDate)}`;
+      cardDueDate.className = dueClass;
+      cardDueDate.style.display = 'inline';
+  } else {
+      cardDueDate.textContent = 'New card';
+      cardDueDate.className = 'text-primary';
+      cardDueDate.style.display = 'inline';
+  }
+}
+
+// Display question
+if (questionEl) {
+  questionEl.innerHTML = card.question;
+}
+
+// Hide answer initially
+if (answerEl) {
+  answerEl.innerHTML = card.answer;
+  answerEl.classList.add('hidden');
+}
+
+// Update button states
+if (toggleButton) {
+  toggleButton.disabled = false;
+  toggleButton.innerHTML = '<i class="bi bi-eye me-1"></i> Show Answer';
+}
+
+if (prevButton) {
+  prevButton.disabled = currentCardIndex === 0;
+}
+
+if (nextButton) {
+  nextButton.disabled = currentCardIndex >= cards.length - 1;
+}
+
+// Update spaced repetition buttons
+updateAnswerButtonLabels(card);
+
+// Show/hide buttons based on settings
+toggleSpacedRepetitionUI();
+
+// Play audio if present and autoplay is enabled
+if (userSettings.autoplayAudio && card.audio) {
+  const audioElement = document.getElementById('card-audio');
+  if (audioElement) {
+      audioElement.src = card.audio;
+      audioElement.play();
+  }
+}
+
+// Enable edit button
+const editCardButton = document.getElementById('edit-card-button');
+if (editCardButton) editCardButton.style.display = 'inline-block';
+}
+
+// Update answer button labels based on card interval
+function updateAnswerButtonLabels(card) {
+const againBtn = document.getElementById('answer-again');
+const hardBtn = document.getElementById('answer-hard');
+const goodBtn = document.getElementById('answer-good');
+const easyBtn = document.getElementById('answer-easy');
+
+if (!againBtn || !hardBtn || !goodBtn || !easyBtn) return;
+
+// Calculate intervals for each button
+let againInterval = "1d";
+let hardInterval = "2d";
+let goodInterval = "3d";
+let easyInterval = "4d";
+
+if (card.interval) {
+  // For cards with existing intervals
+  againInterval = "1d";
+  hardInterval = Math.max(2, Math.ceil(card.interval * NEW_INTERVAL_HARD)) + "d";
+  goodInterval = Math.ceil(card.interval * (card.ease || EASE_FACTOR_DEFAULT)) + "d";
+  easyInterval = Math.ceil(card.interval * (card.ease || EASE_FACTOR_DEFAULT) * EASE_MODIFIER_EASY) + "d";
+}
+
+// Update button labels
+const againLabel = againBtn.querySelector('.btn-interval');
+const hardLabel = hardBtn.querySelector('.btn-interval');
+const goodLabel = goodBtn.querySelector('.btn-interval');
+const easyLabel = easyBtn.querySelector('.btn-interval');
+
+if (againLabel) againLabel.textContent = againInterval;
+if (hardLabel) hardLabel.textContent = hardInterval;
+if (goodLabel) goodLabel.textContent = goodInterval;
+if (easyLabel) easyLabel.textContent = easyInterval;
+}
+
+// Show next card
+function showNextCard() {
+if (!currentPageId || !allFlashcards[currentPageId]) return;
+
+const cards = allFlashcards[currentPageId].cards;
+if (currentCardIndex < cards.length - 1) {
+  currentCardIndex++;
+  displayCurrentCard();
+}
+}
+
+// Show previous card
+function showPreviousCard() {
+if (currentCardIndex > 0) {
+  currentCardIndex--;
+  displayCurrentCard();
+}
+}
+
+// Toggle answer visibility
+function toggleAnswer() {
+const answerEl = document.getElementById('answer');
+const toggleButton = document.getElementById('toggle-button');
+const answerButtonsContainer = document.getElementById('answer-buttons-container');
+
+if (!answerEl || !toggleButton) return;
+
+if (answerEl.classList.contains('hidden')) {
+  // Show answer
+  answerEl.classList.remove('hidden');
+  toggleButton.innerHTML = '<i class="bi bi-eye-slash me-1"></i> Hide Answer';
+  
+  // Show answer buttons if using spaced repetition
+  if (userSettings.useSpacedRepetition && answerButtonsContainer) {
+      answerButtonsContainer.style.display = 'flex';
+  }
+} else {
+  // Hide answer
+  answerEl.classList.add('hidden');
+  toggleButton.innerHTML = '<i class="bi bi-eye me-1"></i> Show Answer';
+  
+  // Hide answer buttons
+  if (answerButtonsContainer) {
+      answerButtonsContainer.style.display = 'none';
+  }
+}
+}
+
+// Answer current card (spaced repetition)
+function answerCard(rating) {
+// Get current card
+if (!currentPageId || !allFlashcards[currentPageId]) return;
+
+const cards = allFlashcards[currentPageId].cards;
+if (!cards || currentCardIndex >= cards.length) return;
+
+const card = cards[currentCardIndex];
+
+// Apply spaced repetition algorithm
+applySpacedRepetition(card, rating);
+
+// Record review
+recordCardReview(currentCardIndex, currentPageId, rating);
+
+// Save changes
+saveFlashcardsToLocalStorage();
+
+// Show next card or loop to beginning if at end
+if (currentCardIndex < cards.length - 1) {
+  showNextCard();
+} else {
+  // Reset to first card if at end
+  currentCardIndex = 0;
+  displayCurrentCard();
+  
+  // Show completion message
+  showNotification('Deck complete! Starting over from the beginning.');
+}
+
+// Update due counts
+updateDueCounts();
+}
+
+// Start auto-advance timer
+function startAutoAdvance() {
+// Stop any existing timer
+stopAutoAdvance();
+
+// Get delay from select element
+const delayEl = document.getElementById('auto-advance-delay');
+const delay = parseInt(delayEl?.value || 7) * 1000;
+
+// Start timer
+autoAdvanceTimer = setInterval(() => {
+  const answerEl = document.getElementById('answer');
+  
+  if (!answerEl) return;
+  
+  if (answerEl.classList.contains('hidden')) {
+      // If answer is hidden, show it
+      toggleAnswer();
+  } else {
+      // If answer is showing, go to next card or answer with 'good'
+      if (userSettings.useSpacedRepetition) {
+          answerCard('good');
+      } else {
+          const nextButton = document.getElementById('next-button');
+          
+          if (nextButton && !nextButton.disabled) {
+              showNextCard();
+              // Hide answer for next card
+              answerEl.classList.add('hidden');
+              const toggleButton = document.getElementById('toggle-button');
+              if (toggleButton) {
+                  toggleButton.innerHTML = '<i class="bi bi-eye me-1"></i> Show Answer';
+              }
+          } else {
+              // Reached the end, stop auto-advance
+              stopAutoAdvance();
+              
+              const checkbox = document.getElementById('auto-advance');
+              if (checkbox) checkbox.checked = false;
+          }
+      }
+  }
+}, delay);
+}
+
+// Stop auto-advance timer
+function stopAutoAdvance() {
+if (autoAdvanceTimer) {
+  clearInterval(autoAdvanceTimer);
+  autoAdvanceTimer = null;
+}
+}
+
+// Apply spaced repetition algorithm
+function applySpacedRepetition(card, rating) {
+  // Initialize card review data if not present
+  if (!card.interval) card.interval = 0;
+  if (!card.ease) card.ease = EASE_FACTOR_DEFAULT;
+  if (!card.reviewCount === undefined) card.reviewCount = 0;
+  
+  // Update review count
+  card.reviewCount++;
+  
+  // Calculate new interval and ease based on rating
+  let newInterval, newEase;
+  
+  switch (rating) {
+      case 'again':
+          // Reset interval to 1 day
+          newInterval = 1;
+          newEase = Math.max(1.3, card.ease - 0.2);
+          break;
+          
+      case 'hard':
+          if (card.interval === 0) {
+              // First time learning
+              newInterval = 1;
+          } else {
+              // Increase interval but by less than for 'good'
+              newInterval = Math.max(2, Math.ceil(card.interval * NEW_INTERVAL_HARD));
+          }
+          newEase = Math.max(1.3, card.ease * EASE_MODIFIER_HARD);
+          break;
+          
+      case 'good':
+          if (card.interval === 0) {
+              // First time learning
+              newInterval = 1;
+          } else if (card.interval === 1) {
+              // Second review
+              newInterval = 3;
+          } else {
+              // Subsequent reviews
+              newInterval = Math.ceil(card.interval * card.ease * INTERVAL_MODIFIER);
+          }
+          newEase = card.ease * EASE_MODIFIER_GOOD;
+          break;
+          
+      case 'easy':
+          if (card.interval === 0) {
+              // First time learning
+              newInterval = 3;
+          } else if (card.interval === 1) {
+              // Second review
+              newInterval = 7;
+          } else {
+              // Subsequent reviews
+              newInterval = Math.ceil(card.interval * card.ease * EASE_MODIFIER_EASY * INTERVAL_MODIFIER);
+          }
+          newEase = card.ease * EASE_MODIFIER_EASY;
+          break;
+  }
+  
+  // Apply limits
+  newInterval = Math.min(MAX_INTERVAL, Math.max(MIN_INTERVAL, newInterval));
+  
+  // Update card
+  card.interval = newInterval;
+  card.ease = newEase;
+  
+  // Calculate due date
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + newInterval);
+  card.due = dueDate.toISOString();
+}
+
+// Perform quick sync (incremental)
+async function syncSection(notebookId, sectionId) {
+  if (isSyncing) {
+      showNotification('Sync already in progress. Please wait.');
+      return;
+  }
+  
+  try {
+      isSyncing = true;
+      updateSyncStatus('Syncing...');
+      disableButtons(true);
+      
+      // Call sync API
+      const response = await fetch(`/api/sync/section/${sectionId}`, {
+          method: 'POST'
+      });
+      
+      if (response.status === 401) {
+          window.location.href = '/auth/signin';
+          throw { status: 401, message: 'Authentication required' };
+      }
+      
+      if (!response.ok) {
+          throw new Error(`Sync failed: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      // Reload flashcards after successful sync
+      if (result.success) {
+          await loadFlashcards();
+          showNotification(`Sync complete! Updated ${result.cardsUpdated} flashcards.`);
+          
+          // Save last sync info
+          saveLastSyncInfo(notebookId, sectionId);
+      } else {
+          showNotification('Sync failed. Please try again.', true);
+      }
+  } catch (error) {
+      console.error('Sync error:', error);
+      showNotification('Failed to sync. Please try again.', true);
+  } finally {
+      isSyncing = false;
+      updateSyncStatus('');
+      disableButtons(false);
+  }
+}
+
+// Perform full sync
+async function fullSync(notebookId, sectionId) {
+  if (isSyncing) {
+      showNotification('Sync already in progress. Please wait.');
+      return;
+  }
+  
+  // Confirm with user
+  if (!confirm('Full sync may take several minutes for large note collections. Continue?')) {
+      return;
+  }
+  
+  try {
+      isSyncing = true;
+      updateSyncStatus('Performing full sync...');
+      disableButtons(true);
+      
+      // Call full sync API
+      const response = await fetch(`/api/sync/full/${notebookId}/${sectionId}`, {
+          method: 'POST'
+      });
+      
+      if (response.status === 401) {
+          window.location.href = '/auth/signin';
+          throw { status: 401, message: 'Authentication required' };
+      }
+      
+      if (!response.ok) {
+          throw new Error(`Full sync failed: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      // Reload flashcards after successful sync
+      if (result.success) {
+          await loadFlashcards();
+          showNotification(`Full sync complete! Created ${result.cardsUpdated} flashcards.`);
+          
+          // Save last sync info
+          saveLastSyncInfo(notebookId, sectionId);
+      } else {
+          showNotification('Full sync failed. Please try again.', true);
+      }
+  } catch (error) {
+      console.error('Full sync error:', error);
+      showNotification('Failed to perform full sync. Please try again.', true);
+  } finally {
+      isSyncing = false;
+      updateSyncStatus('');
+      disableButtons(false);
+  }
+}
+
+// Save last sync information
+async function saveLastSyncInfo(notebookId, sectionId) {
+  try {
+      await fetch('/api/sync/save-last', {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ notebookId, sectionId })
+      });
+  } catch (error) {
+      console.error('Error saving sync info:', error);
+  }
+}
+
+// Load saved selection from localStorage
+function loadLastSelection() {
+  const savedSelection = localStorage.getItem('lastSelection');
+  if (!savedSelection) return;
+  
+  try {
+      const { notebookId, sectionId } = JSON.parse(savedSelection);
+      
+      if (!notebookId) return;
+      
+      // Set notebook select value
+      const notebookSelect = document.getElementById('notebook-select');
+      if (notebookSelect) {
+          notebookSelect.value = notebookId;
+          currentNotebookId = notebookId;
+          
+          // Load sections for this notebook
+          loadSections(notebookId).then(() => {
+              if (!sectionId) return;
+              
+              // Set section select value
+              const sectionSelect = document.getElementById('section-select');
+              if (sectionSelect) {
+                  sectionSelect.value = sectionId;
+                  currentSectionId = sectionId;
+                  
+                  // Enable sync buttons
+                  const syncButton = document.getElementById('sync-button');
+                  const fullSyncButton = document.getElementById('full-sync-button');
+                  if (syncButton) syncButton.disabled = false;
+                  if (fullSyncButton) fullSyncButton.disabled = false;
+              }
+          });
+      }
+  } catch (error) {
+      console.error('Error loading saved selection:', error);
+  }
+}
+
+// Save selection to localStorage
+function saveSelection() {
+  if (!currentNotebookId || !currentSectionId) return;
+  
+  localStorage.setItem('lastSelection', JSON.stringify({
+      notebookId: currentNotebookId,
+      sectionId: currentSectionId
+  }));
+}
+
+// Check URL parameters for direct access
+function checkUrlParameters() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const pageId = urlParams.get('page');
+  
+  if (pageId && allFlashcards && allFlashcards[pageId]) {
+      selectPage(pageId);
+  }
+}
+
+// Generate shareable URL
+function getShareableUrl(pageId) {
+  const baseUrl = window.location.origin + window.location.pathname;
+  return `${baseUrl}?page=${pageId}`;
+}
+
+// Batch editing functions
+function enableBatchEditMode() {
+  const batchEditPanel = document.getElementById('batch-edit-panel');
+  if (batchEditPanel) {
+      batchEditPanel.style.display = 'block';
+  }
+  
+  // Enable checkboxes on cards
+  const pagesList = document.getElementById('pages-list');
+  if (pagesList) {
+      const listItems = pagesList.querySelectorAll('li');
+      listItems.forEach(item => {
+          // Add checkbox
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.className = 'form-check-input me-2 batch-select';
+          item.prepend(checkbox);
+      });
+  }
+  
+  // Show batch edit controls
+  const batchControls = document.getElementById('batch-edit-controls');
+  if (batchControls) {
+      batchControls.style.display = 'flex';
+  }
+}
+
+function applyBatchEdits() {
+  // Get all selected cards
+  const selectedItems = document.querySelectorAll('.batch-select:checked');
+  if (selectedItems.length === 0) {
+      showNotification('No cards selected for batch editing', true);
+      return;
+  }
+  
+  // Get batch edit values
+  const addTagsInput = document.getElementById('batch-add-tags');
+  const removeTagsInput = document.getElementById('batch-remove-tags');
+  const suspendToggle = document.getElementById('batch-suspend');
+  
+  const addTags = addTagsInput ? addTagsInput.value.split(',').map(t => t.trim()).filter(t => t) : [];
+  const removeTags = removeTagsInput ? removeTagsInput.value.split(',').map(t => t.trim()).filter(t => t) : [];
+  const suspend = suspendToggle ? suspendToggle.checked : false;
+  
+// Apply edits to each selected card
+let editCount = 0;
+let pagesEdited = [];
+
+selectedItems.forEach(checkbox => {
+    const pageId = checkbox.closest('li').dataset.pageId;
+    if (!pageId || !allFlashcards[pageId] || !allFlashcards[pageId].cards) return;
+    
+    // Apply to all cards in the page
+    allFlashcards[pageId].cards.forEach(card => {
+        if (!card) return;
+        
+        // Initialize tags array if it doesn't exist
+        if (!card.tags) card.tags = [];
+        
+        // Add tags
+        addTags.forEach(tag => {
+            if (!card.tags.includes(tag)) {
+                card.tags.push(tag);
+            }
+        });
+        
+        // Remove tags
+        if (removeTags.length > 0) {
+            card.tags = card.tags.filter(tag => !removeTags.includes(tag));
+        }
+        
+        // Apply suspend state
+        if (suspend) {
+            card.suspended = true;
+        }
+        
+        editCount++;
+    });
+    
+    pagesEdited.push(pageId);
+});
+
+// Save changes
+saveFlashcardsToLocalStorage();
+
+// Update UI
+cancelBatchEdits();
+updateTagFilterList();
+
+// Refresh pages if current page was edited
+if (pagesEdited.includes(currentPageId)) {
+    displayCurrentCard();
+}
+
+showNotification(`Batch edit applied to ${editCount} cards across ${pagesEdited.length} pages`);
+}
+
+function cancelBatchEdits() {
+// Hide batch edit panel
+const batchEditPanel = document.getElementById('batch-edit-panel');
+if (batchEditPanel) {
+    batchEditPanel.style.display = 'none';
+}
+
+// Remove checkboxes
+const checkboxes = document.querySelectorAll('.batch-select');
+checkboxes.forEach(checkbox => checkbox.remove());
+
+// Hide batch controls
+const batchControls = document.getElementById('batch-edit-controls');
+if (batchControls) {
+    batchControls.style.display = 'none';
+}
+
+// Clear batch edit inputs
+const addTagsInput = document.getElementById('batch-add-tags');
+const removeTagsInput = document.getElementById('batch-remove-tags');
+const suspendToggle = document.getElementById('batch-suspend');
+
+if (addTagsInput) addTagsInput.value = '';
+if (removeTagsInput) removeTagsInput.value = '';
+if (suspendToggle) suspendToggle.checked = false;
+}
+
+// Card editor functions
+function openCardEditor(pageId, cardIndex) {
+if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) return;
+
+const card = allFlashcards[pageId].cards[cardIndex];
+
+// Show card editor
+const editorContainer = document.getElementById('card-editor-container');
+if (editorContainer) {
+    editorContainer.style.display = 'block';
+}
+
+// Hide flashcard container
+const flashcardContainer = document.querySelector('.flashcard-container');
+if (flashcardContainer) {
+    flashcardContainer.style.display = 'none';
+}
+
+// Populate editor fields
+const questionField = document.getElementById('edit-question');
+const answerField = document.getElementById('edit-answer');
+const tagsField = document.getElementById('edit-tags');
+
+if (questionField) questionField.value = card.question;
+if (answerField) answerField.value = card.answer;
+if (tagsField) tagsField.value = card.tags ? card.tags.join(', ') : '';
+}
+
+function closeCardEditor() {
+// Hide card editor
+const editorContainer = document.getElementById('card-editor-container');
+if (editorContainer) {
+    editorContainer.style.display = 'none';
+}
+
+// Show flashcard container
+const flashcardContainer = document.querySelector('.flashcard-container');
+if (flashcardContainer) {
+    flashcardContainer.style.display = 'block';
+}
+}
+
+function saveCardEdits() {
+// Get edited values
+const questionField = document.getElementById('edit-question');
+const answerField = document.getElementById('edit-answer');
+const tagsField = document.getElementById('edit-tags');
+
+if (!questionField || !answerField) {
+    closeCardEditor();
+    return;
+}
+
+const newQuestion = questionField.value.trim();
+const newAnswer = answerField.value.trim();
+const newTags = tagsField.value.split(',').map(tag => tag.trim()).filter(tag => tag);
+
+// Validate
+if (!newQuestion || !newAnswer) {
+    showNotification('Question and answer are required', true);
+    return;
+}
+
+// Update card
+if (!currentPageId || !allFlashcards[currentPageId] || 
+    !allFlashcards[currentPageId].cards[currentCardIndex]) {
+    closeCardEditor();
+    return;
+}
+
+const card = allFlashcards[currentPageId].cards[currentCardIndex];
+card.question = newQuestion;
+card.answer = newAnswer;
+card.tags = newTags;
+
+// Save changes
+saveFlashcardsToLocalStorage();
+
+// Update UI
+closeCardEditor();
+displayCurrentCard();
+updateTagFilterList();
+
+showNotification('Card updated successfully');
+}
+
+// Study session functions
+function startStudySession(includeDue, includeNew, limit, tags) {
+// Create a queue of cards to study
+const studyQueue = [];
+
+// First, collect all due cards
+if (includeDue) {
+    const today = new Date();
+    
+    Object.entries(allFlashcards).forEach(([pageId, page]) => {
+        if (!page.cards) return;
+        
+        page.cards.forEach((card, index) => {
+            // Check if card is due
+            if (card.due && new Date(card.due) <= today && !card.suspended) {
+                // Check tags if specified
+                const matchesTags = tags.length === 0 || 
+                    (card.tags && tags.some(tag => card.tags.includes(tag)));
+                
+                if (matchesTags) {
+                    studyQueue.push({
+                        pageId,
+                        cardIndex: index,
+                        type: 'review',
+                        due: new Date(card.due)
+                    });
+                }
+            }
+        });
+    });
+}
+
+// Sort review cards by due date (earliest first)
+studyQueue.sort((a, b) => a.due - b.due);
+
+// Then, add new cards if needed
+if (includeNew) {
+    const newCards = [];
+    
+    Object.entries(allFlashcards).forEach(([pageId, page]) => {
+        if (!page.cards) return;
+        
+        page.cards.forEach((card, index) => {
+            // Check if card is new (never reviewed)
+            if (!card.due && !card.suspended) {
+                // Check tags if specified
+                const matchesTags = tags.length === 0 || 
+                    (card.tags && tags.some(tag => card.tags.includes(tag)));
+                
+                if (matchesTags) {
+                    newCards.push({
+                        pageId,
+                        cardIndex: index,
+                        type: 'new'
+                    });
+                }
+            }
+        });
+    });
+    
+    // Sort new cards according to settings
+    if (userSettings.cardOrderNew === 'random') {
+        // Shuffle new cards
+        for (let i = newCards.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [newCards[i], newCards[j]] = [newCards[j], newCards[i]];
+        }
+    }
+    
+    // Add to the study queue
+    studyQueue.push(...newCards);
+}
+
+// Limit to specified number
+const limitedQueue = studyQueue.slice(0, limit);
+
+// If no cards to study, show message
+if (limitedQueue.length === 0) {
+    showNotification('No cards to study based on your criteria.', true);
+    return;
+}
+
+// Store queue in study session
+studySession = {
+    active: true,
+    queue: limitedQueue,
+    currentIndex: 0,
+    startTime: new Date()
+};
+
+// Begin study mode
+showStudyMode();
+}
+
+function showStudyMode() {
+// Hide main content
+const mainContent = document.getElementById('main-content');
+const studyContent = document.getElementById('study-mode-content');
+
+if (mainContent) mainContent.style.display = 'none';
+if (studyContent) studyContent.style.display = 'block';
+
+// Hide completion screen if previously shown
+const studyCompletedEl = document.getElementById('study-completed');
+const studyCardEl = document.getElementById('study-card');
+
+if (studyCompletedEl) studyCompletedEl.style.display = 'none';
+if (studyCardEl) studyCardEl.style.display = 'block';
+
+// Update study status display
+updateStudyStatusDisplay();
+
+// Show first card
+showStudyCard();
+}
+
+function exitStudyMode() {
+// Record study time
+if (studySession.startTime) {
+    const endTime = new Date();
+    const studyTimeMinutes = Math.round((endTime - studySession.startTime) / (1000 * 60));
+    userStudyStats.studyTimeMinutes = (userStudyStats.studyTimeMinutes || 0) + studyTimeMinutes;
+    saveStudyStats();
+}
+
+// Reset study session
+studySession = {
+    active: false,
+    queue: [],
+    currentIndex: 0
+};
+
+// Show main content
+const mainContent = document.getElementById('main-content');
+const studyContent = document.getElementById('study-mode-content');
+
+if (mainContent) mainContent.style.display = 'block';
+if (studyContent) studyContent.style.display = 'none';
+
+// Update stats display
+updateStatsDisplay();
+
+// Update heatmap
+updateHeatmap();
+}
+
+function updateStudyStatusDisplay() {
+const statusContainer = document.getElementById('study-session-status');
+if (!statusContainer) return;
+
+const currentIndex = studySession.currentIndex;
+const totalCards = studySession.queue.length;
+const newCards = studySession.queue.filter(item => item.type === 'new').length;
+const reviewCards = studySession.queue.filter(item => item.type === 'review').length;
+
+statusContainer.innerHTML = `
+    <div class="study-status">
+        <div class="progress mb-2" style="height: 8px;">
+            <div class="progress-bar" role="progressbar" style="width: ${(currentIndex / totalCards * 100)}%"></div>
+        </div>
+        <div class="d-flex justify-content-between">
+            <div><span class="badge bg-primary">${newCards}</span> New</div>
+            <div><span class="badge bg-info">${reviewCards}</span> Review</div>
+            <div><span class="badge bg-success">${currentIndex}</span> / ${totalCards} Cards</div>
+        </div>
+    </div>
+`;
+}
+
+function showStudyCard() {
+// Check if we've reached the end of the queue
+if (studySession.currentIndex >= studySession.queue.length) {
+    showStudyCompletion();
+    return;
+}
+
+// Get current card info
+const currentItem = studySession.queue[studySession.currentIndex];
+const { pageId, cardIndex, type } = currentItem;
+
+// Get card from flashcards
+if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) {
+    // Skip invalid card
+    studySession.currentIndex++;
+    showStudyCard();
+    return;
+}
+
+const card = allFlashcards[pageId].cards[cardIndex];
+
+// Get UI elements
+const questionEl = document.getElementById('study-question');
+const answerEl = document.getElementById('study-answer');
+const pageTitle = document.getElementById('study-page-title');
+const cardType = document.getElementById('study-card-type');
+const showAnswerBtn = document.getElementById('study-show-answer');
+const answerButtons = document.getElementById('study-answer-buttons');
+
+// Update page title
+if (pageTitle) {
+    pageTitle.textContent = allFlashcards[pageId].pageTitle;
+}
+
+// Update card type
+if (cardType) {
+    if (type === 'new') {
+        cardType.textContent = 'New Card';
+        cardType.className = 'badge bg-primary';
+    } else {
+        cardType.textContent = 'Review';
+        cardType.className = 'badge bg-info';
+    }
+}
+
+// Set question and answer
+if (questionEl) questionEl.innerHTML = card.question;
+if (answerEl) {
+    answerEl.innerHTML = card.answer;
+    answerEl.classList.add('hidden');
+}
+
+// Show/hide buttons
+if (showAnswerBtn) showAnswerBtn.style.display = 'block';
+if (answerButtons) answerButtons.style.display = 'none';
+
+// Update study status
+updateStudyStatusDisplay();
+
+// Update spaced repetition button labels
+updateStudyAnswerButtonLabels(card);
+}
+
+function updateStudyAnswerButtonLabels(card) {
+const againBtn = document.getElementById('study-again');
+const hardBtn = document.getElementById('study-hard');
+const goodBtn = document.getElementById('study-good');
+const easyBtn = document.getElementById('study-easy');
+
+if (!againBtn || !hardBtn || !goodBtn || !easyBtn) return;
+
+// Calculate intervals for each button
+let againInterval = "1d";
+let hardInterval = "2d";
+let goodInterval = "3d";
+let easyInterval = "4d";
+
+if (card.interval) {
+    // For cards with existing intervals
+    againInterval = "1d";
+    hardInterval = Math.max(2, Math.ceil(card.interval * NEW_INTERVAL_HARD)) + "d";
+    goodInterval = Math.ceil(card.interval * (card.ease || EASE_FACTOR_DEFAULT)) + "d";
+    easyInterval = Math.ceil(card.interval * (card.ease || EASE_FACTOR_DEFAULT) * EASE_MODIFIER_EASY) + "d";
+}
+
+// Update button labels
+const againLabel = againBtn.querySelector('.btn-interval');
+const hardLabel = hardBtn.querySelector('.btn-interval');
+const goodLabel = goodBtn.querySelector('.btn-interval');
+const easyLabel = easyBtn.querySelector('.btn-interval');
+
+if (againLabel) againLabel.textContent = againInterval;
+if (hardLabel) hardLabel.textContent = hardInterval;
+if (goodLabel) goodLabel.textContent = goodInterval;
+if (easyLabel) easyLabel.textContent = easyInterval;
+}
+
+function showStudyAnswer() {
+const answerEl = document.getElementById('study-answer');
+const showAnswerBtn = document.getElementById('study-show-answer');
+const answerButtons = document.getElementById('study-answer-buttons');
+
+if (answerEl) answerEl.classList.remove('hidden');
+if (showAnswerBtn) showAnswerBtn.style.display = 'none';
+if (answerButtons) answerButtons.style.display = 'flex';
+}
+
+function answerStudyCard(rating) {
+// Get current item from queue
+if (studySession.currentIndex >= studySession.queue.length) return;
+
+const { pageId, cardIndex } = studySession.queue[studySession.currentIndex];
+
+// Get card
+if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) {
+    // Skip invalid card
+    studySession.currentIndex++;
+    showStudyCard();
+    return;
+}
+
+const card = allFlashcards[pageId].cards[cardIndex];
+
+// Apply spaced repetition algorithm
+applySpacedRepetition(card, rating);
+
+// Record review
+recordCardReview(cardIndex, pageId, rating);
+
+// Save changes
+saveFlashcardsToLocalStorage();
+
+// Move to next card
+studySession.currentIndex++;
+showStudyCard();
+}
+
+function showStudyCompletion() {
+// Show completion screen
+const studyCardEl = document.getElementById('study-card');
+const completionEl = document.getElementById('study-completed');
+const statsEl = document.getElementById('study-completed-stats');
+
+if (studyCardEl) studyCardEl.style.display = 'none';
+if (completionEl) completionEl.style.display = 'block';
+
+// Calculate stats
+const totalCards = studySession.queue.length;
+const newCards = studySession.queue.filter(card => card.type === 'new').length;
+const reviewCards = totalCards - newCards;
+
+// Display completion stats
+if (statsEl) {
+    statsEl.innerHTML = `
+        <div class="text-center mb-4">
+            <div class="display-1 text-success mb-3"><i class="bi bi-check-circle"></i></div>
+            <h3>Study Session Complete!</h3>
+            <p class="lead">You've reviewed ${totalCards} cards</p>
+        </div>
+        <div class="row">
+            <div class="col-6 text-center">
+                <div class="display-4 text-primary">${newCards}</div>
+                <p>New Cards</p>
+            </div>
+            <div class="col-6 text-center">
+                <div class="display-4 text-info">${reviewCards}</div>
+                <p>Reviews</p>
+            </div>
+        </div>
+    `;
+}
+
+// Update study time
+if (studySession.startTime) {
+    const endTime = new Date();
+    const studyMinutes = Math.round((endTime - studySession.startTime) / (1000 * 60));
+    
+    const timeEl = document.createElement('div');
+    timeEl.className = 'text-center mt-3';
+    timeEl.innerHTML = `
+        <p class="text-muted">Study time: ${studyMinutes} minutes</p>
+    `;
+    
+    if (statsEl) statsEl.appendChild(timeEl);
+}
+}
+
+// Save flashcards to localStorage (for persistence between syncs)
+function saveFlashcardsToLocalStorage() {
+try {
+    localStorage.setItem('allFlashcards', JSON.stringify(allFlashcards));
+} catch (error) {
+    console.error('Error saving flashcards to localStorage:', error);
+    
+    // If error is due to storage limit, try to compress by removing non-essential data
+    if (error.name === 'QuotaExceededError') {
+        try {
+            // Create a copy with only essential data
+            const compressedFlashcards = {};
+            
+            Object.entries(allFlashcards).forEach(([pageId, pageData]) => {
+                compressedFlashcards[pageId] = {
+                    pageTitle: pageData.pageTitle,
+                    cards: pageData.cards.map(card => ({
+                        question: card.question,
+                        answer: card.answer,
+                        interval: card.interval,
+                        ease: card.ease,
+                        due: card.due,
+                        reviewCount: card.reviewCount,
+                        tags: card.tags,
+                        suspended: card.suspended
+                    }))
+                };
+            });
+            
+            localStorage.setItem('allFlashcards', JSON.stringify(compressedFlashcards));
+            console.log('Saved compressed flashcards to localStorage');
+        } catch (compressionError) {
+            console.error('Error saving compressed flashcards:', compressionError);
+            showNotification('Warning: Could not save all cards to local storage', true);
+        }
+    }
+}
+}
+
+// Load flashcards from localStorage
+function loadFlashcardsFromLocalStorage() {
+try {
+    const savedFlashcards = localStorage.getItem('allFlashcards');
+    if (savedFlashcards) {
+        return JSON.parse(savedFlashcards);
+    }
+} catch (error) {
+    console.error('Error loading flashcards from localStorage:', error);
+}
+return null;
+}
+
+// UI helper functions
+function showLoading(message) {
+const loadingElement = document.getElementById('loading-indicator');
+if (loadingElement) {
+    loadingElement.textContent = message || 'Loading...';
+    loadingElement.style.display = 'block';
+}
+}
+
+function hideLoading() {
+const loadingElement = document.getElementById('loading-indicator');
+if (loadingElement) {
+    loadingElement.style.display = 'none';
+}
+}
+
+function showNotification(message, isError = false) {
+const notification = document.getElementById('notification') || createNotificationElement();
+notification.textContent = message;
+notification.className = `notification ${isError ? 'error' : 'success'}`;
+notification.style.display = 'block';
+
+// Auto-hide after 3 seconds
+setTimeout(() => {
+    notification.style.display = 'none';
+}, 3000);
+}
+
+function createNotificationElement() {
+const notification = document.createElement('div');
+notification.id = 'notification';
+notification.className = 'notification';
+document.body.appendChild(notification);
+return notification;
+}
+
+function updateSyncStatus(message) {
+const syncStatus = document.getElementById('sync-status');
+if (syncStatus) {
+    syncStatus.textContent = message;
+}
+}
+
+function disableButtons(disable) {
+const syncButton = document.getElementById('sync-button');
+const fullSyncButton = document.getElementById('full-sync-button');
+
+if (syncButton) syncButton.disabled = disable;
+if (fullSyncButton) fullSyncButton.disabled = disable;
+}
+
+// Ensure compatibility with touch devices
+document.addEventListener('touchstart', function() {}, {passive: true});

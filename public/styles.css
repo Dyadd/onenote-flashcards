@@ -1,183 +1,443 @@
-/* Enhanced styles for OneNote Flashcards app */
+/* Enhanced Styles for OneNote Flashcards with Anki Features */
 
-body {
-    background-color: #f8f9fa;
+/* Night Mode Support */
+body.night-mode {
+    background-color: #2d2d2d;
+    color: #e0e0e0;
 }
 
-.navbar-brand {
-    font-weight: bold;
+body.night-mode .card {
+    background-color: #3d3d3d;
+    border: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
-/* Flashcard styling */
-.flashcard-container {
-    min-height: 400px;
+body.night-mode .card-header {
+    background-color: #333;
+    border-bottom: 1px solid #444;
+}
+
+body.night-mode .form-select,
+body.night-mode .form-control {
+    background-color: #444;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+body.night-mode .flashcard {
+    background-color: #3d3d3d;
+}
+
+body.night-mode .question {
+    color: #e0e0e0;
+}
+
+body.night-mode .answer {
+    background-color: #444;
+    border-left: 4px solid #0d6efd;
+}
+
+body.night-mode .list-group-item {
+    background-color: #3d3d3d;
+    border-color: #444;
+    color: #e0e0e0;
+}
+
+body.night-mode .list-group-item:hover {
+    background-color: #444;
+}
+
+body.night-mode .list-group-item.active {
+    background-color: #2c5282;
+    color: #fff;
+}
+
+/* Settings Panel */
+.settings-panel {
+    position: fixed;
+    top: 0;
+    right: -350px;
+    width: 350px;
+    height: 100vh;
+    background-color: #fff;
+    box-shadow: -5px 0 15px rgba(0, 0, 0, 0.1);
+    z-index: 1040;
+    padding: 1.5rem;
+    overflow-y: auto;
+    transition: right 0.3s ease;
+}
+
+body.night-mode .settings-panel {
+    background-color: #2d2d2d;
+    box-shadow: -5px 0 15px rgba(0, 0, 0, 0.3);
+}
+
+.settings-panel-visible {
+    right: 0;
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #eee;
+}
+
+body.night-mode .settings-header {
+    border-bottom-color: #444;
+}
+
+.settings-header h5 {
+    margin: 0;
+    font-weight: 600;
+}
+
+.settings-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.settings-section {
+    margin-bottom: 1.5rem;
+}
+
+.settings-section h6 {
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: #444;
+}
+
+body.night-mode .settings-section h6 {
+    color: #ccc;
+}
+
+/* Anki-style answer buttons */
+.answer-buttons {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    justify-content: space-between;
+}
+
+.answer-btn {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.answer-btn:hover {
+    transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
-.flashcard {
-    min-height: 250px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 20px;
+.answer-btn-again {
+    background-color: #dc3545;
+    color: white;
+}
+
+.answer-btn-hard {
+    background-color: #fd7e14;
+    color: white;
+}
+
+.answer-btn-good {
+    background-color: #28a745;
+    color: white;
+}
+
+.answer-btn-easy {
+    background-color: #17a2b8;
+    color: white;
+}
+
+/* Study mode styles */
+.study-mode {
+    padding: 2rem;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.study-card {
     background-color: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    border-radius: 10px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    padding: 2rem;
+    margin-bottom: 2rem;
 }
 
-.question {
-    font-size: 1.4rem;
-    font-weight: 500;
+body.night-mode .study-card {
+    background-color: #3d3d3d;
+}
+
+.study-question {
+    font-size: 1.5rem;
     text-align: center;
-    margin-bottom: 30px;
-    color: #212529;
-    line-height: 1.6;
+    margin-bottom: 2rem;
+    line-height: 1.5;
 }
 
-.answer {
-    font-size: 1.1rem;
+.study-answer {
+    font-size: 1.2rem;
     background-color: #f8f9fa;
-    padding: 20px;
+    padding: 1.5rem;
     border-radius: 8px;
     border-left: 4px solid #0d6efd;
-    line-height: 1.5;
-    transition: all 0.3s ease;
+    margin-bottom: 1.5rem;
 }
 
-.answer p:last-child {
-    margin-bottom: 0;
+body.night-mode .study-answer {
+    background-color: #444;
 }
 
-.answer strong {
-    color: #0d6efd;
+.study-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
 }
 
-.hidden {
+.study-footer {
+    margin-top: 1.5rem;
+    text-align: center;
+}
+
+.study-completed {
+    background-color: white;
+    border-radius: 10px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    padding: 2rem;
+    text-align: center;
     display: none;
 }
 
-/* Pages list styling */
-.pages-list {
-    max-height: 400px;
-    overflow-y: auto;
-    border-radius: 6px;
+body.night-mode .study-completed {
+    background-color: #3d3d3d;
 }
 
-.pages-list .list-group-item {
+/* Tag system */
+.tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.tag-item {
+    background-color: #e9ecef;
+    color: #495057;
+    padding: 0.25rem 0.75rem;
+    border-radius: 15px;
+    font-size: 0.875rem;
+    display: inline-flex;
+    align-items: center;
+}
+
+body.night-mode .tag-item {
+    background-color: #444;
+    color: #e0e0e0;
+}
+
+.tag-item .tag-remove {
+    margin-left: 0.5rem;
     cursor: pointer;
-    transition: background-color 0.2s;
+    font-size: 0.75rem;
 }
 
-.pages-list .list-group-item:hover {
+.tag-input-container {
+    position: relative;
+    margin-bottom: 1rem;
+}
+
+.tag-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 10;
+    display: none;
+}
+
+body.night-mode .tag-suggestions {
+    background-color: #3d3d3d;
+    border-color: #555;
+}
+
+.tag-suggestion-item {
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+}
+
+.tag-suggestion-item:hover {
     background-color: #f0f7ff;
 }
 
-.pages-list .list-group-item.active {
-    background-color: #e7f1ff;
-    color: #0a58ca;
-    border-color: #c5dcff;
+body.night-mode .tag-suggestion-item:hover {
+    background-color: #444;
 }
 
-/* Loading and notification */
-#loading-indicator {
-    padding: 15px;
+/* Heatmap */
+.heatmap-container {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+}
+
+body.night-mode .heatmap-container {
+    background-color: #333;
+}
+
+.heatmap-week {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 0.5rem;
+}
+
+.heatmap-month {
+    display: grid;
+    grid-template-columns: repeat(15, 1fr);
+    gap: 4px;
+}
+
+.heatmap-cell {
+    width: 18px;
+    height: 18px;
+    border-radius: 2px;
+    background-color: #eee;
+}
+
+body.night-mode .heatmap-cell {
+    background-color: #444;
+}
+
+.heat-0 {
+    background-color: #eee;
+}
+
+.heat-1 {
+    background-color: #c6e48b;
+}
+
+.heat-2 {
+    background-color: #7bc96f;
+}
+
+.heat-3 {
+    background-color: #239a3b;
+}
+
+.heat-4 {
+    background-color: #196127;
+}
+
+body.night-mode .heat-0 {
+    background-color: #333;
+}
+
+body.night-mode .heat-1 {
+    background-color: #365c30;
+}
+
+body.night-mode .heat-2 {
+    background-color: #3d7636;
+}
+
+body.night-mode .heat-3 {
+    background-color: #246c2d;
+}
+
+body.night-mode .heat-4 {
+    background-color: #196127;
+}
+
+/* Statistics display */
+.stats-container {
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+}
+
+body.night-mode .stats-container {
+    background-color: #333;
+}
+
+.stats-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.stat-item {
     text-align: center;
-    font-style: italic;
+    flex: 1;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #0d6efd;
+}
+
+body.night-mode .stat-value {
+    color: #5b9aff;
+}
+
+.stat-label {
+    font-size: 0.875rem;
     color: #6c757d;
 }
 
-.notification {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 1050;
-    padding: 15px 25px;
-    border-radius: 5px;
-    color: white;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
-    display: none;
-    transition: all 0.3s ease;
+body.night-mode .stat-label {
+    color: #adb5bd;
 }
 
-.notification.success {
-    background-color: #198754;
-}
-
-.notification.error {
-    background-color: #dc3545;
-}
-
-/* Auto advance container */
-#auto-advance-container {
+/* Batch editing */
+.batch-edit-panel {
     background-color: #f8f9fa;
-    padding: 10px;
-    border-radius: 5px;
-    margin-top: 15px;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    display: none;
 }
 
-/* Instruction card */
-.instruction-card {
-    background-color: #fcfcfc;
+body.night-mode .batch-edit-panel {
+    background-color: #333;
 }
 
-.instruction-card .card-body {
-    font-size: 0.95rem;
+.batch-edit-controls {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1rem;
 }
 
-.instruction-card ol {
-    padding-left: 20px;
+/* Study session status */
+.study-session-status {
+    margin-bottom: 1.5rem;
 }
 
-.instruction-card li {
-    margin-bottom: 8px;
+.study-status {
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
 }
 
-/* Share button */
-#share-link {
-    margin-left: 10px;
-    font-size: 0.85rem;
-}
-
-/* Responsive adjustments */
-@media (max-width: 992px) {
-    .col-lg-9 {
-        margin-top: 20px;
-    }
-    
-    .flashcard {
-        min-height: 200px;
-    }
-    
-    .question {
-        font-size: 1.2rem;
-    }
-}
-
-/* Card counter badge */
-#card-counter {
-    font-size: 1rem;
-}
-
-/* Progress bar */
-#sync-progress-container {
-    height: 8px;
-    margin-top: 15px;
-    background-color: #e9ecef;
-    border-radius: 4px;
-    overflow: hidden;
-}
-
-#sync-progress {
-    height: 100%;
-    background-color: #0d6efd;
-    transition: width 0.3s ease;
-}
-
-/* Search input */
-#search-input {
-    border-right: none;
-}
-
-#clear-search {
-    border-left: none;
+body.night-mode .study-status {
+    background-color: #333;
 }
