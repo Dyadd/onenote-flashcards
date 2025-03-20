@@ -44,6 +44,9 @@ document.addEventListener('DOMContentLoaded', () => {
 async function init() {
     console.log('Initializing application...');
     try {
+        // Setup auth buttons first, before anything else
+        setupAuthButtons();
+        
         // Load user settings
         loadUserSettings();
         
@@ -773,17 +776,25 @@ function setupAuthButtons() {
     // Main login button
     const loginButtonMain = document.getElementById('login-button-main');
     if (loginButtonMain) {
+        console.log('Found main login button, adding click handler');
         loginButtonMain.addEventListener('click', () => {
+            console.log('Main login button clicked');
             window.location.href = '/auth/signin';
         });
+    } else {
+        console.error('login-button-main not found in DOM');
     }
     
     // Navbar login button
     const loginButton = document.getElementById('login-button');
     if (loginButton) {
+        console.log('Found navbar login button, adding click handler');
         loginButton.addEventListener('click', () => {
+            console.log('Navbar login button clicked');
             window.location.href = '/auth/signin';
         });
+    } else {
+        console.error('login-button not found in DOM');
     }
     
     // Logout button

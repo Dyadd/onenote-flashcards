@@ -362,3 +362,363 @@
                                         Next <i class="bi bi-chevron-right ms-1"></i>
                                     </button>
                                 </div>
+                                
+                                <!-- Auto advance and audio options -->
+                                <div id="auto-advance-container" class="mt-3 text-center">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="checkbox" id="auto-advance">
+                                        <label class="form-check-label" for="auto-advance">
+                                            Auto-advance cards
+                                        </label>
+                                    </div>
+                                    <select id="auto-advance-delay" class="form-select form-select-sm d-inline-block">
+                                        <option value="5">5 seconds</option>
+                                        <option value="7" selected>7 seconds</option>
+                                        <option value="10">10 seconds</option>
+                                        <option value="15">15 seconds</option>
+                                    </select>
+                                    <audio id="card-audio" style="display: none;"></audio>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Card Editor -->
+                        <div id="card-editor-container" class="card mt-3" style="display: none;">
+                            <div class="card-header">
+                                <h5><i class="bi bi-pencil me-2"></i>Edit Flashcard</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="edit-question" class="form-label">Question:</label>
+                                    <textarea id="edit-question" class="form-control" rows="3"></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-answer" class="form-label">Answer:</label>
+                                    <textarea id="edit-answer" class="form-control" rows="5"></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-tags" class="form-label">Tags:</label>
+                                    <input type="text" id="edit-tags" class="form-control" placeholder="tag1, tag2, ...">
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <button id="save-card-edits" class="btn btn-primary">Save Changes</button>
+                                    <button id="cancel-card-edits" class="btn btn-outline-secondary">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Study Tips Card -->
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h5><i class="bi bi-lightbulb me-2"></i>Tips for Efficient Learning</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6 class="mb-2"><i class="bi bi-graph-up text-primary me-2"></i>Spaced Repetition</h6>
+                                        <p class="mb-3 small">For optimal learning, review cards at increasing intervals based on your performance. This app automatically schedules reviews to maximize retention.</p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6 class="mb-2"><i class="bi bi-keyboard me-2"></i>Keyboard Shortcuts</h6>
+                                        <ul class="ps-4 mb-3 small">
+                                            <li><kbd>→</kbd> Next card / <kbd>←</kbd> Previous card</li>
+                                            <li><kbd>Space</kbd> Show/hide answer</li>
+                                            <li><kbd>1-4</kbd> Rate card (again, hard, good, easy)</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="alert alert-info mb-0">
+                                    <i class="bi bi-info-circle me-2"></i><strong>Remember:</strong> Regular short study sessions are more effective than cramming!
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Study Mode Content -->
+            <div id="study-mode-content" class="container" style="display: none;">
+                <div class="study-header">
+                    <button id="exit-study-mode" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left me-1"></i>Back to Decks
+                    </button>
+                    <div id="study-session-status">
+                        <!-- Study progress will be shown here -->
+                    </div>
+                </div>
+                
+                <div id="study-card" class="study-card">
+                    <div class="study-card-header mb-4 d-flex justify-content-between align-items-center">
+                        <h5 id="study-page-title">Studying</h5>
+                        <span id="study-card-type" class="badge bg-primary">New Card</span>
+                    </div>
+                    
+                    <div id="study-question" class="study-question">
+                        <!-- Question will be displayed here -->
+                    </div>
+                    
+                    <div id="study-answer" class="study-answer hidden">
+                        <!-- Answer will be displayed here -->
+                    </div>
+                    
+                    <div class="study-footer">
+                        <button id="study-show-answer" class="btn btn-lg btn-info">
+                            Show Answer
+                        </button>
+                        
+                        <div id="study-answer-buttons" class="answer-buttons" style="display: none;">
+                            <button id="study-again" class="answer-btn answer-btn-again">
+                                <div class="btn-interval">1d</div>
+                                <div class="btn-label">Again</div>
+                            </button>
+                            <button id="study-hard" class="answer-btn answer-btn-hard">
+                                <div class="btn-interval">3d</div>
+                                <div class="btn-label">Hard</div>
+                            </button>
+                            <button id="study-good" class="answer-btn answer-btn-good">
+                                <div class="btn-interval">7d</div>
+                                <div class="btn-label">Good</div>
+                            </button>
+                            <button id="study-easy" class="answer-btn answer-btn-easy">
+                                <div class="btn-interval">14d</div>
+                                <div class="btn-label">Easy</div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="study-completed" class="study-completed">
+                    <div id="study-completed-stats">
+                        <!-- Completion stats will be displayed here -->
+                    </div>
+                    <div class="mt-4">
+                        <button id="return-to-decks" class="btn btn-primary">
+                            Return to Decks
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Settings Panel -->
+        <div id="settings-panel" class="settings-panel">
+            <div class="settings-header">
+                <h5><i class="bi bi-gear me-2"></i>Settings</h5>
+                <button class="settings-close" id="settings-close">&times;</button>
+            </div>
+            
+            <div class="settings-section">
+                <h6>Appearance</h6>
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="night-mode-toggle">
+                    <label class="form-check-label" for="night-mode-toggle">Night Mode</label>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <h6>Study Options</h6>
+                <div class="mb-2">
+                    <label for="new-cards-per-day" class="form-label">New cards per day:</label>
+                    <input type="number" id="new-cards-per-day" class="form-control" min="1" max="200" value="20">
+                </div>
+                <div class="mb-2">
+                    <label for="reviews-per-day" class="form-label">Reviews per day:</label>
+                    <input type="number" id="reviews-per-day" class="form-control" min="1" max="500" value="100">
+                </div>
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="spaced-rep-toggle" checked>
+                    <label class="form-check-label" for="spaced-rep-toggle">Use Spaced Repetition</label>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <h6>Card Order</h6>
+                <div class="mb-2">
+                    <label for="new-card-order" class="form-label">New cards:</label>
+                    <select id="new-card-order" class="form-select">
+                        <option value="due">In order</option>
+                        <option value="random">Random</option>
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label for="review-card-order" class="form-label">Review cards:</label>
+                    <select id="review-card-order" class="form-select">
+                        <option value="due">Due date</option>
+                        <option value="random">Random</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <h6>Media</h6>
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="autoplay-toggle">
+                    <label class="form-check-label" for="autoplay-toggle">Autoplay Audio</label>
+                </div>
+            </div>
+            
+            <div class="settings-section">
+                <button id="reset-settings" class="btn btn-sm btn-outline-danger">Reset to Defaults</button>
+            </div>
+        </div>
+        
+        <!-- Custom Study Modal -->
+        <div class="modal fade" id="custom-study-modal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-journal-plus me-2"></i>Custom Study</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="custom-study-new" checked>
+                                <label class="form-check-label" for="custom-study-new">
+                                    Include new cards
+                                </label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="custom-study-review" checked>
+                                <label class="form-check-label" for="custom-study-review">
+                                    Include cards due for review
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="custom-study-limit" class="form-label">Number of cards:</label>
+                            <input type="number" id="custom-study-limit" class="form-control" value="50" min="1" max="500">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="custom-study-tags" class="form-label">Limit to tags (comma separated):</label>
+                            <input type="text" id="custom-study-tags" class="form-control" placeholder="Optional">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="start-custom-study">Start Studying</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Statistics Modal -->
+        <div class="modal fade" id="stats-modal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-bar-chart me-2"></i>Study Statistics</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="detailed-stats-container">
+                            <!-- Detailed stats will be rendered here by JavaScript -->
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Help Modal -->
+        <div class="modal fade" id="help-modal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Help & Features</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6><i class="bi bi-graph-up me-2"></i>Spaced Repetition</h6>
+                                <p>Cards are scheduled based on your performance. After answering, choose:</p>
+                                <ul>
+                                    <li><strong>Again</strong> - Reset progress (review in 1 day)</li>
+                                    <li><strong>Hard</strong> - Shorter interval than normal</li>
+                                    <li><strong>Good</strong> - Standard interval increase</li>
+                                    <li><strong>Easy</strong> - Longer interval than normal</li>
+                                </ul>
+                                
+                                <h6><i class="bi bi-keyboard me-2"></i>Keyboard Shortcuts</h6>
+                                <ul>
+                                    <li><kbd>Right Arrow</kbd> - Next flashcard</li>
+                                    <li><kbd>Left Arrow</kbd> - Previous flashcard</li>
+                                    <li><kbd>Space</kbd> - Show/hide answer</li>
+                                    <li><kbd>1</kbd> - Again</li>
+                                    <li><kbd>2</kbd> - Hard</li>
+                                    <li><kbd>3</kbd> - Good</li>
+                                    <li><kbd>4</kbd> - Easy</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <h6><i class="bi bi-tags me-2"></i>Tagging System</h6>
+                                <p>Organize your flashcards by adding tags. Filter your cards by specific tags for targeted study.</p>
+                                
+                                <h6><i class="bi bi-pencil me-2"></i>Editing & Customization</h6>
+                                <p>Edit individual cards or use batch editing to modify multiple cards at once. Customize the app appearance and study settings.</p>
+                                
+                                <h6><i class="bi bi-share me-2"></i>Sharing</h6>
+                                <p>Share your flashcard sets with others by generating a direct link. Collaborate with classmates or friends.</p>
+                                
+                                <h6><i class="bi bi-bar-chart me-2"></i>Statistics</h6>
+                                <p>Track your learning progress with detailed statistics and a heatmap of your study activity.</p>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <h6><i class="bi bi-shield-check me-2"></i>Authentication</h6>
+                        <p>Your connection with Microsoft is secure and only accesses your OneNote content. We don't store your Microsoft credentials.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Notification Element -->
+        <div id="notification" class="notification" style="display: none;"></div>
+    </div>
+    
+    <!-- Bootstrap and App Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Emergency fix for login buttons -->
+    <script>
+      // Direct click handler for login buttons to ensure they work
+      document.addEventListener('DOMContentLoaded', () => {
+        console.log('Debug script running to fix login buttons');
+        
+        const mainBtn = document.getElementById('login-button-main');
+        const navBtn = document.getElementById('login-button');
+        
+        console.log('Main login button found:', !!mainBtn);
+        console.log('Nav login button found:', !!navBtn);
+        
+        if (mainBtn) {
+          mainBtn.onclick = function() {
+            console.log('Main login button clicked');
+            window.location.href = '/auth/signin';
+          };
+        }
+        
+        if (navBtn) {
+          navBtn.onclick = function() {
+            console.log('Nav login button clicked');
+            window.location.href = '/auth/signin';
+          };
+        }
+      });
+    </script>
+    
+    <!-- Main application script -->
+    <script src="app.js"></script>
+</body>
+</html>
