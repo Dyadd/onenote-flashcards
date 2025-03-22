@@ -441,3 +441,145 @@ body.night-mode .batch-edit-panel {
 body.night-mode .study-status {
     background-color: #333;
 }
+
+/* Add these to your existing styles.css */
+
+/* Page transition effects */
+.app-view {
+    opacity: 1;
+    transition: opacity 0.2s ease;
+}
+
+.app-view.fade-out {
+    opacity: 0;
+}
+
+/* Active navigation styling */
+.nav-link {
+    position: relative;
+}
+
+.nav-link.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background-color: white;
+}
+
+body.night-mode .nav-link.active::after {
+    background-color: #5b9aff;
+}
+
+/* Make card views more focused */
+.flashcard {
+    min-height: 250px;
+    display: flex;
+    flex-direction: column;
+}
+
+.study-card {
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+.question, .study-question {
+    margin-bottom: 2rem;
+    font-size: 1.25rem;
+    line-height: 1.6;
+}
+
+/* Improve layout on smaller screens */
+@media (max-width: 768px) {
+    .nav-link {
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .flashcard {
+        min-height: 200px;
+    }
+    
+    .answer-buttons {
+        flex-wrap: wrap;
+    }
+    
+    .answer-btn {
+        flex: 1 0 40%;
+        margin: 0.25rem;
+    }
+}
+
+/* Clean up the stats view for desktop and mobile */
+#stats-view .card {
+    margin-bottom: 1.5rem;
+}
+
+/* Improve form controls */
+.form-select, .form-control {
+    box-shadow: none;
+    border: 1px solid #ced4da;
+}
+
+.form-select:focus, .form-control:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+body.night-mode .form-select, 
+body.night-mode .form-control {
+    border-color: #444;
+}
+
+/* Make buttons more consistent */
+.btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.btn-primary:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+/* Improved focus for accessibility */
+.btn:focus, .form-select:focus, .form-control:focus {
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    outline: none;
+}
+
+/* Enhance page transitions */
+.app-view {
+    animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Additional night-mode improvements */
+body.night-mode .card {
+    background-color: #2d2d2d;
+    border-color: #444;
+}
+
+body.night-mode .card-header {
+    background-color: #333;
+    border-bottom-color: #444;
+}
+
+body.night-mode .modal-content {
+    background-color: #2d2d2d;
+    border-color: #444;
+}
+
+body.night-mode .modal-header,
+body.night-mode .modal-footer {
+    border-color: #444;
+}
+
+body.night-mode .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}

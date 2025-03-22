@@ -15,23 +15,39 @@
 </head>
 <body>
     <div class="container-fluid">
-        <!-- Navbar -->
+        <!-- Top Navigation Bar -->
         <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
             <div class="container-fluid">
                 <a class="navbar-brand" href="#">
                     <i class="bi bi-journal-text me-2"></i>OneNote Flashcards
                 </a>
+                
+                <!-- Main Navigation -->
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                     <span class="navbar-toggler-icon"></span>
                 </button>
+                
                 <div class="collapse navbar-collapse" id="navbarNav">
-                    <ul class="navbar-nav me-auto">
+                    <!-- Only show these nav items when logged in -->
+                    <ul class="navbar-nav me-auto auth-required" style="display: none;">
                         <li class="nav-item">
-                            <a class="nav-link active" href="#"><i class="bi bi-house me-1"></i>Home</a>
+                            <a class="nav-link active" data-view="home" href="#">
+                                <i class="bi bi-house me-1"></i>Decks
+                            </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#stats-modal" data-bs-toggle="modal">
+                            <a class="nav-link" data-view="notebooks" href="#">
+                                <i class="bi bi-journal me-1"></i>Notebooks
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-view="stats" href="#">
                                 <i class="bi bi-bar-chart me-1"></i>Statistics
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-view="settings" href="#">
+                                <i class="bi bi-gear me-1"></i>Settings
                             </a>
                         </li>
                         <li class="nav-item">
@@ -40,16 +56,15 @@
                             </a>
                         </li>
                     </ul>
+                    
+                    <!-- User Authentication Section -->
                     <div class="d-flex align-items-center">
-                        <button id="settings-toggle" class="btn btn-outline-light me-2">
-                            <i class="bi bi-gear me-1"></i>Settings
-                        </button>
                         <span id="auth-status" class="text-white me-3">Not Signed In</span>
                         <span id="user-info" class="text-white me-3"></span>
-                        <button id="login-button" class="btn btn-outline-light">
+                        <button id="login-button" class="btn btn-outline-light auth-hidden">
                             <i class="bi bi-microsoft me-1"></i>Sign In
                         </button>
-                        <button id="logout-button" class="btn btn-outline-light" style="display: none;">
+                        <button id="logout-button" class="btn btn-outline-light auth-required" style="display: none;">
                             <i class="bi bi-box-arrow-right me-1"></i>Sign Out
                         </button>
                     </div>
@@ -57,8 +72,10 @@
             </div>
         </nav>
         
-        <!-- Login Section - Shown when not authenticated -->
-        <div id="login-section" class="container text-center mt-5">
+        <!-- Application Views - Only one is shown at a time -->
+        
+        <!-- Login View -->
+        <div id="login-view" class="app-view container">
             <div class="row justify-content-center">
                 <div class="col-md-8 col-lg-6">
                     <div class="card shadow">
@@ -131,434 +148,452 @@
             </div>
         </div>
         
-        <!-- Main Content Section - Shown when authenticated -->
-        <div id="content-section" class="row" style="display: none;">
-            <!-- Main content area - default view -->
-            <div id="main-content" class="container-fluid">
-                <div class="row">
-                    <!-- Sidebar -->
-                    <div class="col-lg-3">
-                        <!-- Stats Overview -->
-                        <div class="card mb-3">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <h5><i class="bi bi-lightning me-2"></i>Study Overview</h5>
+        <!-- Home/Decks View -->
+        <div id="home-view" class="app-view auth-required container" style="display: none;">
+            <div class="row">
+                <!-- Stats Overview Column -->
+                <div class="col-lg-4">
+                    <div class="card mb-3">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5><i class="bi bi-lightning me-2"></i>Study Overview</h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <div id="stats-container" class="stats-container">
+                                <!-- Stats will be filled by JavaScript -->
                             </div>
-                            <div class="card-body p-0">
-                                <div id="stats-container" class="stats-container">
-                                    <!-- Stats will be filled by JavaScript -->
-                                </div>
-                                <div id="heatmap-container" class="heatmap-container">
-                                    <h6 class="mb-3">Activity</h6>
-                                    <!-- Heatmap will be filled by JavaScript -->
-                                </div>
+                            <div id="heatmap-container" class="heatmap-container">
+                                <h6 class="mb-3">Activity</h6>
+                                <!-- Heatmap will be filled by JavaScript -->
                             </div>
                         </div>
-                        
-                        <!-- Notebook & Section Selection -->
-                        <div class="card mb-3">
-                            <div class="card-header">
-                                <h5><i class="bi bi-journal me-2"></i>OneNote Content</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="mb-3">
-                                    <label for="notebook-select" class="form-label">Notebook:</label>
-                                    <select id="notebook-select" class="form-select">
-                                        <option value="">Select a notebook</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="mb-3">
-                                    <label for="section-select" class="form-label">Section:</label>
-                                    <select id="section-select" class="form-select">
-                                        <option value="">Select a section</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="d-grid gap-2">
-                                    <button id="sync-button" class="btn btn-primary" disabled>
-                                        <i class="bi bi-arrow-repeat me-1"></i>Quick Sync
-                                    </button>
-                                    <button id="full-sync-button" class="btn btn-outline-primary" disabled>
-                                        <i class="bi bi-cloud-download me-1"></i>Full Sync
-                                    </button>
-                                </div>
-                                
-                                <div id="sync-status" class="text-center text-muted mt-2"></div>
-                                <div class="progress d-none" id="sync-progress-container">
-                                    <div id="sync-progress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
-                                </div>
+                    </div>
+                </div>
+                
+                <!-- Flashcard Decks Column -->
+                <div class="col-lg-8">
+                    <div class="card pages-container">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5><i class="bi bi-files me-2"></i>Flashcard Decks</h5>
+                            <div>
+                                <button id="custom-study-button" class="btn btn-sm btn-outline-primary me-1">
+                                    <i class="bi bi-gear me-1"></i>Custom Study
+                                </button>
+                                <button id="study-now-button" class="btn btn-sm btn-success me-1">
+                                    <i class="bi bi-play-fill me-1"></i>Study
+                                </button>
+                                <span id="pages-count" class="badge bg-primary">0</span>
                             </div>
                         </div>
-                        
-                        <!-- Pages List with Filters -->
-                        <div class="card mt-3 pages-container">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <h5><i class="bi bi-files me-2"></i>Flashcard Decks</h5>
-                                <div>
-                                    <button id="study-now-button" class="btn btn-sm btn-success me-1">
-                                        <i class="bi bi-play-fill me-1"></i>Study
-                                    </button>
-                                    <span id="pages-count" class="badge bg-primary">0</span>
-                                </div>
+                        <div class="card-body">
+                            <!-- Search -->
+                            <div class="input-group mb-3">
+                                <input type="text" id="search-input" class="form-control" placeholder="Search flashcards...">
+                                <button class="btn btn-outline-secondary" type="button" id="clear-search">✕</button>
                             </div>
-                            <div class="card-body">
-                                <!-- Search -->
-                                <div class="input-group mb-3">
-                                    <input type="text" id="search-input" class="form-control" placeholder="Search flashcards...">
-                                    <button class="btn btn-outline-secondary" type="button" id="clear-search">✕</button>
-                                </div>
-                                
-                                <!-- Filters -->
-                                <div class="filters mb-3">
-                                    <div class="row g-2">
-                                        <div class="col-6">
-                                            <select id="difficulty-filter" class="form-select form-select-sm">
-                                                <option value="all">All Difficulties</option>
-                                                <option value="easy">Easy</option>
-                                                <option value="medium">Medium</option>
-                                                <option value="hard">Hard</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-6">
-                                            <select id="status-filter" class="form-select form-select-sm">
-                                                <option value="all">All Status</option>
-                                                <option value="due">Due Today</option>
-                                                <option value="new">New Cards</option>
-                                                <option value="learned">Learned</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Tag Filter -->
-                                <div id="tag-filter-container" class="mb-3">
-                                    <div class="d-flex">
-                                        <select id="tag-filter" class="form-select form-select-sm">
-                                            <option value="">Filter by tag...</option>
+                            
+                            <!-- Filters -->
+                            <div class="filters mb-3">
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <select id="difficulty-filter" class="form-select form-select-sm">
+                                            <option value="all">All Difficulties</option>
+                                            <option value="easy">Easy</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="hard">Hard</option>
                                         </select>
-                                        <button id="clear-tags-filter" class="btn btn-sm btn-outline-secondary ms-2">Clear</button>
                                     </div>
-                                    <div id="active-tags-container" class="tag-list mt-2">
-                                        <!-- Active tags will be added here -->
+                                    <div class="col-6">
+                                        <select id="status-filter" class="form-select form-select-sm">
+                                            <option value="all">All Status</option>
+                                            <option value="due">Due Today</option>
+                                            <option value="new">New Cards</option>
+                                            <option value="learned">Learned</option>
+                                        </select>
                                     </div>
-                                </div>
-                                
-                                <!-- Batch Edit Panel -->
-                                <div id="batch-edit-panel" class="batch-edit-panel">
-                                    <h6 class="mb-2">Batch Edit</h6>
-                                    <div class="mb-2">
-                                        <label class="form-label">Add Tags:</label>
-                                        <input type="text" id="batch-add-tags" class="form-control form-control-sm" placeholder="tag1, tag2, ...">
-                                    </div>
-                                    <div class="mb-2">
-                                        <label class="form-label">Remove Tags:</label>
-                                        <input type="text" id="batch-remove-tags" class="form-control form-control-sm" placeholder="tag1, tag2, ...">
-                                    </div>
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="checkbox" id="batch-suspend">
-                                        <label class="form-check-label" for="batch-suspend">
-                                            Suspend selected cards
-                                        </label>
-                                    </div>
-                                    <div class="batch-edit-controls">
-                                        <button id="apply-batch-edits" class="btn btn-sm btn-primary">Apply</button>
-                                        <button id="cancel-batch-edits" class="btn btn-sm btn-outline-secondary">Cancel</button>
-                                    </div>
-                                </div>
-                                
-                                <!-- Batch Edit Controls -->
-                                <div id="batch-edit-controls" class="mb-3" style="display: none;">
-                                    <button id="select-all-batch" class="btn btn-sm btn-outline-primary me-1">Select All</button>
-                                    <button id="deselect-all-batch" class="btn btn-sm btn-outline-secondary me-1">Deselect</button>
-                                    <button id="batch-edit-done" class="btn btn-sm btn-success">Done</button>
-                                </div>
-                                
-                                <!-- Loading indicator -->
-                                <div id="loading-indicator" class="text-center p-3">
-                                    <i class="bi bi-arrow-repeat spin me-2"></i>Loading...
-                                </div>
-                                
-                                <!-- Pages list -->
-                                <ul id="pages-list" class="list-group pages-list">
-                                    <li class="list-group-item text-center text-muted">
-                                        <i class="bi bi-info-circle me-2"></i>No flashcards yet. Sync to create them.
-                                    </li>
-                                </ul>
-                                
-                                <!-- Additional Actions -->
-                                <div class="mt-3 d-flex justify-content-between">
-                                    <button id="batch-edit-button" class="btn btn-sm btn-outline-secondary">
-                                        <i class="bi bi-pencil me-1"></i>Batch Edit
-                                    </button>
-                                    <button id="custom-study-button" class="btn btn-sm btn-outline-primary">
-                                        <i class="bi bi-gear me-1"></i>Custom Study
-                                    </button>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Main flashcard area -->
-                    <div class="col-lg-9">
-                        <!-- Flashcard Container -->
-                        <div class="card flashcard-container">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <div>
-                                    <h5 id="current-page-title">OneNote Flashcards</h5>
-                                    <button id="share-link" class="btn btn-sm btn-outline-primary" style="display: none;">
-                                        <i class="bi bi-share me-1"></i>Share
-                                    </button>
-                                    <button id="edit-card-button" class="btn btn-sm btn-outline-secondary ms-1" style="display: none;">
-                                        <i class="bi bi-pencil me-1"></i>Edit Card
-                                    </button>
-                                </div>
-                                <div>
-                                    <span id="card-due-date" class="text-muted me-2" style="display: none;"></span>
-                                    <span id="card-counter" class="badge bg-primary">0/0</span>
-                                </div>
-                            </div>
-                            <div class="card-body">
-                                <div id="flashcard" class="flashcard">
-                                    <div id="card-tags" class="tag-list mb-3">
-                                        <!-- Tags will be displayed here -->
-                                    </div>
-                                    <div id="question" class="question">
-                                        <i class="bi bi-arrow-left-circle me-2"></i>Select a page from the list to view flashcards
-                                    </div>
-                                    <div id="answer" class="answer hidden">
-                                        <!-- Answer will be displayed here -->
-                                    </div>
-                                </div>
-                                
-                                <!-- Anki-style answer buttons (for spaced repetition) -->
-                                <div id="answer-buttons-container" class="answer-buttons mt-3" style="display: none;">
-                                    <button id="answer-again" class="answer-btn answer-btn-again">
-                                        <div class="btn-interval">1d</div>
-                                        <div class="btn-label">Again</div>
-                                    </button>
-                                    <button id="answer-hard" class="answer-btn answer-btn-hard">
-                                        <div class="btn-interval">3d</div>
-                                        <div class="btn-label">Hard</div>
-                                    </button>
-                                    <button id="answer-good" class="answer-btn answer-btn-good">
-                                        <div class="btn-interval">7d</div>
-                                        <div class="btn-label">Good</div>
-                                    </button>
-                                    <button id="answer-easy" class="answer-btn answer-btn-easy">
-                                        <div class="btn-interval">14d</div>
-                                        <div class="btn-label">Easy</div>
-                                    </button>
-                                </div>
-                                
-                                <!-- Standard navigation buttons -->
-                                <div id="standard-buttons-container" class="d-flex justify-content-between mt-3">
-                                    <button id="prev-button" class="btn btn-secondary" disabled>
-                                        <i class="bi bi-chevron-left me-1"></i> Previous
-                                    </button>
-                                    <button id="toggle-button" class="btn btn-info" disabled>
-                                        <i class="bi bi-eye me-1"></i> Show Answer
-                                    </button>
-                                    <button id="next-button" class="btn btn-secondary" disabled>
-                                        Next <i class="bi bi-chevron-right ms-1"></i>
-                                    </button>
-                                </div>
-                                
-                                <!-- Auto advance and audio options -->
-                                <div id="auto-advance-container" class="mt-3 text-center">
-                                    <div class="form-check form-check-inline">
-                                        <input class="form-check-input" type="checkbox" id="auto-advance">
-                                        <label class="form-check-label" for="auto-advance">
-                                            Auto-advance cards
-                                        </label>
-                                    </div>
-                                    <select id="auto-advance-delay" class="form-select form-select-sm d-inline-block">
-                                        <option value="5">5 seconds</option>
-                                        <option value="7" selected>7 seconds</option>
-                                        <option value="10">10 seconds</option>
-                                        <option value="15">15 seconds</option>
+                            
+                            <!-- Tag Filter -->
+                            <div id="tag-filter-container" class="mb-3">
+                                <div class="d-flex">
+                                    <select id="tag-filter" class="form-select form-select-sm">
+                                        <option value="">Filter by tag...</option>
                                     </select>
-                                    <audio id="card-audio" style="display: none;"></audio>
+                                    <button id="clear-tags-filter" class="btn btn-sm btn-outline-secondary ms-2">Clear</button>
                                 </div>
+                                <div id="active-tags-container" class="tag-list mt-2">
+                                    <!-- Active tags will be added here -->
+                                </div>
+                            </div>
+                            
+                            <!-- Loading indicator -->
+                            <div id="loading-indicator" class="text-center p-3">
+                                <i class="bi bi-arrow-repeat spin me-2"></i>Loading...
+                            </div>
+                            
+                            <!-- Pages list -->
+                            <ul id="pages-list" class="list-group pages-list">
+                                <li class="list-group-item text-center text-muted">
+                                    <i class="bi bi-info-circle me-2"></i>No flashcards yet. Sync to create them.
+                                </li>
+                            </ul>
+                            
+                            <!-- Additional Actions -->
+                            <div class="mt-3 d-flex justify-content-between">
+                                <button id="batch-edit-button" class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-pencil me-1"></i>Batch Edit
+                                </button>
                             </div>
                         </div>
-                        
-                        <!-- Card Editor -->
-                        <div id="card-editor-container" class="card mt-3" style="display: none;">
-                            <div class="card-header">
-                                <h5><i class="bi bi-pencil me-2"></i>Edit Flashcard</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="mb-3">
-                                    <label for="edit-question" class="form-label">Question:</label>
-                                    <textarea id="edit-question" class="form-control" rows="3"></textarea>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="edit-answer" class="form-label">Answer:</label>
-                                    <textarea id="edit-answer" class="form-control" rows="5"></textarea>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="edit-tags" class="form-label">Tags:</label>
-                                    <input type="text" id="edit-tags" class="form-control" placeholder="tag1, tag2, ...">
-                                </div>
-                                <div class="d-flex justify-content-between">
-                                    <button id="save-card-edits" class="btn btn-primary">Save Changes</button>
-                                    <button id="cancel-card-edits" class="btn btn-outline-secondary">Cancel</button>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Study Tips Card -->
-                        <div class="card mt-3">
-                            <div class="card-header">
-                                <h5><i class="bi bi-lightbulb me-2"></i>Tips for Efficient Learning</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <h6 class="mb-2"><i class="bi bi-graph-up text-primary me-2"></i>Spaced Repetition</h6>
-                                        <p class="mb-3 small">For optimal learning, review cards at increasing intervals based on your performance. This app automatically schedules reviews to maximize retention.</p>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <h6 class="mb-2"><i class="bi bi-keyboard me-2"></i>Keyboard Shortcuts</h6>
-                                        <ul class="ps-4 mb-3 small">
-                                            <li><kbd>→</kbd> Next card / <kbd>←</kbd> Previous card</li>
-                                            <li><kbd>Space</kbd> Show/hide answer</li>
-                                            <li><kbd>1-4</kbd> Rate card (again, hard, good, easy)</li>
-                                        </ul>
-                                    </div>
-                                </div>
-                                <div class="alert alert-info mb-0">
-                                    <i class="bi bi-info-circle me-2"></i><strong>Remember:</strong> Regular short study sessions are more effective than cramming!
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Study Mode Content -->
-            <div id="study-mode-content" class="container" style="display: none;">
-                <div class="study-header">
-                    <button id="exit-study-mode" class="btn btn-outline-secondary">
-                        <i class="bi bi-arrow-left me-1"></i>Back to Decks
-                    </button>
-                    <div id="study-session-status">
-                        <!-- Study progress will be shown here -->
-                    </div>
-                </div>
-                
-                <div id="study-card" class="study-card">
-                    <div class="study-card-header mb-4 d-flex justify-content-between align-items-center">
-                        <h5 id="study-page-title">Studying</h5>
-                        <span id="study-card-type" class="badge bg-primary">New Card</span>
-                    </div>
-                    
-                    <div id="study-question" class="study-question">
-                        <!-- Question will be displayed here -->
-                    </div>
-                    
-                    <div id="study-answer" class="study-answer hidden">
-                        <!-- Answer will be displayed here -->
-                    </div>
-                    
-                    <div class="study-footer">
-                        <button id="study-show-answer" class="btn btn-lg btn-info">
-                            Show Answer
-                        </button>
-                        
-                        <div id="study-answer-buttons" class="answer-buttons" style="display: none;">
-                            <button id="study-again" class="answer-btn answer-btn-again">
-                                <div class="btn-interval">1d</div>
-                                <div class="btn-label">Again</div>
-                            </button>
-                            <button id="study-hard" class="answer-btn answer-btn-hard">
-                                <div class="btn-interval">3d</div>
-                                <div class="btn-label">Hard</div>
-                            </button>
-                            <button id="study-good" class="answer-btn answer-btn-good">
-                                <div class="btn-interval">7d</div>
-                                <div class="btn-label">Good</div>
-                            </button>
-                            <button id="study-easy" class="answer-btn answer-btn-easy">
-                                <div class="btn-interval">14d</div>
-                                <div class="btn-label">Easy</div>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                
-                <div id="study-completed" class="study-completed">
-                    <div id="study-completed-stats">
-                        <!-- Completion stats will be displayed here -->
-                    </div>
-                    <div class="mt-4">
-                        <button id="return-to-decks" class="btn btn-primary">
-                            Return to Decks
-                        </button>
                     </div>
                 </div>
             </div>
         </div>
         
-        <!-- Settings Panel -->
-        <div id="settings-panel" class="settings-panel">
-            <div class="settings-header">
-                <h5><i class="bi bi-gear me-2"></i>Settings</h5>
-                <button class="settings-close" id="settings-close">&times;</button>
-            </div>
-            
-            <div class="settings-section">
-                <h6>Appearance</h6>
-                <div class="form-check form-switch mb-2">
-                    <input class="form-check-input" type="checkbox" id="night-mode-toggle">
-                    <label class="form-check-label" for="night-mode-toggle">Night Mode</label>
+        <!-- Notebooks View -->
+        <div id="notebooks-view" class="app-view auth-required container" style="display: none;">
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5><i class="bi bi-journal me-2"></i>OneNote Content</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="notebook-select" class="form-label">Notebook:</label>
+                                <select id="notebook-select" class="form-select">
+                                    <option value="">Select a notebook</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="section-select" class="form-label">Section:</label>
+                                <select id="section-select" class="form-select">
+                                    <option value="">Select a section</option>
+                                </select>
+                            </div>
+                            
+                            <div class="d-grid gap-2">
+                                <button id="sync-button" class="btn btn-primary" disabled>
+                                    <i class="bi bi-arrow-repeat me-1"></i>Quick Sync
+                                </button>
+                                <button id="full-sync-button" class="btn btn-outline-primary" disabled>
+                                    <i class="bi bi-cloud-download me-1"></i>Full Sync
+                                </button>
+                            </div>
+                            
+                            <div id="sync-status" class="text-center text-muted mt-2"></div>
+                            <div class="progress d-none" id="sync-progress-container">
+                                <div id="sync-progress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            
-            <div class="settings-section">
-                <h6>Study Options</h6>
-                <div class="mb-2">
-                    <label for="new-cards-per-day" class="form-label">New cards per day:</label>
-                    <input type="number" id="new-cards-per-day" class="form-control" min="1" max="200" value="20">
+        </div>
+        
+        <!-- Card Viewer View -->
+        <div id="cards-view" class="app-view auth-required container" style="display: none;">
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="card flashcard-container">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <button class="btn btn-sm btn-outline-secondary me-2 back-button">
+                                    <i class="bi bi-arrow-left me-1"></i>Back to Decks
+                                </button>
+                                <h5 id="current-page-title" class="d-inline">OneNote Flashcards</h5>
+                            </div>
+                            <div>
+                                <button id="share-link" class="btn btn-sm btn-outline-primary me-1">
+                                    <i class="bi bi-share me-1"></i>Share
+                                </button>
+                                <button id="edit-card-button" class="btn btn-sm btn-outline-secondary me-1">
+                                    <i class="bi bi-pencil me-1"></i>Edit
+                                </button>
+                                <span id="card-due-date" class="text-muted me-2" style="display: none;"></span>
+                                <span id="card-counter" class="badge bg-primary">0/0</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="flashcard" class="flashcard">
+                                <div id="card-tags" class="tag-list mb-3">
+                                    <!-- Tags will be displayed here -->
+                                </div>
+                                <div id="question" class="question">
+                                    <!-- Question will be displayed here -->
+                                </div>
+                                <div id="answer" class="answer hidden">
+                                    <!-- Answer will be displayed here -->
+                                </div>
+                            </div>
+                            
+                            <!-- Anki-style answer buttons (for spaced repetition) -->
+                            <div id="answer-buttons-container" class="answer-buttons mt-3" style="display: none;">
+                                <button id="answer-again" class="answer-btn answer-btn-again">
+                                    <div class="btn-interval">1d</div>
+                                    <div class="btn-label">Again</div>
+                                </button>
+                                <button id="answer-hard" class="answer-btn answer-btn-hard">
+                                    <div class="btn-interval">3d</div>
+                                    <div class="btn-label">Hard</div>
+                                </button>
+                                <button id="answer-good" class="answer-btn answer-btn-good">
+                                    <div class="btn-interval">7d</div>
+                                    <div class="btn-label">Good</div>
+                                </button>
+                                <button id="answer-easy" class="answer-btn answer-btn-easy">
+                                    <div class="btn-interval">14d</div>
+                                    <div class="btn-label">Easy</div>
+                                </button>
+                            </div>
+                            
+                            <!-- Standard navigation buttons -->
+                            <div id="standard-buttons-container" class="d-flex justify-content-between mt-3">
+                                <button id="prev-button" class="btn btn-secondary" disabled>
+                                    <i class="bi bi-chevron-left me-1"></i> Previous
+                                </button>
+                                <button id="toggle-button" class="btn btn-info" disabled>
+                                    <i class="bi bi-eye me-1"></i> Show Answer
+                                </button>
+                                <button id="next-button" class="btn btn-secondary" disabled>
+                                    Next <i class="bi bi-chevron-right ms-1"></i>
+                                </button>
+                            </div>
+                            
+                            <!-- Auto advance controls -->
+                            <div id="auto-advance-container" class="mt-3 text-center">
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="checkbox" id="auto-advance">
+                                    <label class="form-check-label" for="auto-advance">
+                                        Auto-advance cards
+                                    </label>
+                                </div>
+                                <select id="auto-advance-delay" class="form-select form-select-sm d-inline-block">
+                                    <option value="5">5 seconds</option>
+                                    <option value="7" selected>7 seconds</option>
+                                    <option value="10">10 seconds</option>
+                                    <option value="15">15 seconds</option>
+                                </select>
+                                <audio id="card-audio" style="display: none;"></audio>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="mb-2">
-                    <label for="reviews-per-day" class="form-label">Reviews per day:</label>
-                    <input type="number" id="reviews-per-day" class="form-control" min="1" max="500" value="100">
+            </div>
+        </div>
+        
+        <!-- Card Editor View -->
+        <div id="editor-view" class="app-view auth-required container" style="display: none;">
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5><i class="bi bi-pencil me-2"></i>Edit Flashcard</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="edit-question" class="form-label">Question:</label>
+                                <textarea id="edit-question" class="form-control" rows="3"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="edit-answer" class="form-label">Answer:</label>
+                                <textarea id="edit-answer" class="form-control" rows="5"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="edit-tags" class="form-label">Tags:</label>
+                                <input type="text" id="edit-tags" class="form-control" placeholder="tag1, tag2, ...">
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <button id="save-card-edits" class="btn btn-primary">Save Changes</button>
+                                <button id="cancel-card-edits" class="btn btn-outline-secondary">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-check form-switch mb-2">
-                    <input class="form-check-input" type="checkbox" id="spaced-rep-toggle" checked>
-                    <label class="form-check-label" for="spaced-rep-toggle">Use Spaced Repetition</label>
+            </div>
+        </div>
+        
+        <!-- Study Mode View -->
+        <div id="study-view" class="app-view auth-required container" style="display: none;">
+            <div class="study-header">
+                <button id="exit-study-mode" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i>Back to Decks
+                </button>
+                <div id="study-session-status">
+                    <!-- Study progress will be shown here -->
                 </div>
             </div>
             
-            <div class="settings-section">
-                <h6>Card Order</h6>
-                <div class="mb-2">
-                    <label for="new-card-order" class="form-label">New cards:</label>
-                    <select id="new-card-order" class="form-select">
-                        <option value="due">In order</option>
-                        <option value="random">Random</option>
-                    </select>
+            <div id="study-card" class="study-card">
+                <div class="study-card-header mb-4 d-flex justify-content-between align-items-center">
+                    <h5 id="study-page-title">Studying</h5>
+                    <span id="study-card-type" class="badge bg-primary">New Card</span>
                 </div>
-                <div class="mb-2">
-                    <label for="review-card-order" class="form-label">Review cards:</label>
-                    <select id="review-card-order" class="form-select">
-                        <option value="due">Due date</option>
-                        <option value="random">Random</option>
-                    </select>
+                
+                <div id="study-question" class="study-question">
+                    <!-- Question will be displayed here -->
+                </div>
+                
+                <div id="study-answer" class="study-answer hidden">
+                    <!-- Answer will be displayed here -->
+                </div>
+                
+                <div class="study-footer">
+                    <button id="study-show-answer" class="btn btn-lg btn-info">
+                        Show Answer
+                    </button>
+                    
+                    <div id="study-answer-buttons" class="answer-buttons" style="display: none;">
+                        <button id="study-again" class="answer-btn answer-btn-again">
+                            <div class="btn-interval">1d</div>
+                            <div class="btn-label">Again</div>
+                        </button>
+                        <button id="study-hard" class="answer-btn answer-btn-hard">
+                            <div class="btn-interval">3d</div>
+                            <div class="btn-label">Hard</div>
+                        </button>
+                        <button id="study-good" class="answer-btn answer-btn-good">
+                            <div class="btn-interval">7d</div>
+                            <div class="btn-label">Good</div>
+                        </button>
+                        <button id="study-easy" class="answer-btn answer-btn-easy">
+                            <div class="btn-interval">14d</div>
+                            <div class="btn-label">Easy</div>
+                        </button>
+                    </div>
                 </div>
             </div>
             
-            <div class="settings-section">
-                <h6>Media</h6>
-                <div class="form-check form-switch mb-2">
-                    <input class="form-check-input" type="checkbox" id="autoplay-toggle">
-                    <label class="form-check-label" for="autoplay-toggle">Autoplay Audio</label>
+            <div id="study-completed" class="study-completed">
+                <div id="study-completed-stats">
+                    <!-- Completion stats will be displayed here -->
+                </div>
+                <div class="mt-4">
+                    <button id="return-to-decks" class="btn btn-primary">
+                        Return to Decks
+                    </button>
                 </div>
             </div>
-            
-            <div class="settings-section">
-                <button id="reset-settings" class="btn btn-sm btn-outline-danger">Reset to Defaults</button>
+        </div>
+        
+        <!-- Statistics View -->
+        <div id="stats-view" class="app-view auth-required container" style="display: none;">
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5><i class="bi bi-bar-chart me-2"></i>Study Statistics</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="detailed-stats-container">
+                                <!-- Detailed stats will be rendered here by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Settings View -->
+        <div id="settings-view" class="app-view auth-required container" style="display: none;">
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5><i class="bi bi-gear me-2"></i>Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-4">
+                                <h6>Appearance</h6>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="night-mode-toggle">
+                                    <label class="form-check-label" for="night-mode-toggle">Night Mode</label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <h6>Study Options</h6>
+                                <div class="mb-2">
+                                    <label for="new-cards-per-day" class="form-label">New cards per day:</label>
+                                    <input type="number" id="new-cards-per-day" class="form-control" min="1" max="200" value="20">
+                                </div>
+                                <div class="mb-2">
+                                    <label for="reviews-per-day" class="form-label">Reviews per day:</label>
+                                    <input type="number" id="reviews-per-day" class="form-control" min="1" max="500" value="100">
+                                </div>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="spaced-rep-toggle" checked>
+                                    <label class="form-check-label" for="spaced-rep-toggle">Use Spaced Repetition</label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <h6>Card Order</h6>
+                                <div class="mb-2">
+                                    <label for="new-card-order" class="form-label">New cards:</label>
+                                    <select id="new-card-order" class="form-select">
+                                        <option value="due">In order</option>
+                                        <option value="random">Random</option>
+                                    </select>
+                                </div>
+                                <div class="mb-2">
+                                    <label for="review-card-order" class="form-label">Review cards:</label>
+                                    <select id="review-card-order" class="form-select">
+                                        <option value="due">Due date</option>
+                                        <option value="random">Random</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <h6>Media</h6>
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" id="autoplay-toggle">
+                                    <label class="form-check-label" for="autoplay-toggle">Autoplay Audio</label>
+                                </div>
+                            </div>
+                            
+                            <button id="reset-settings" class="btn btn-outline-danger">Reset to Defaults</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Batch Edit Panel - Now a Modal -->
+        <div class="modal fade" id="batch-edit-modal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>Batch Edit Cards</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-2">
+                            <label class="form-label">Add Tags:</label>
+                            <input type="text" id="batch-add-tags" class="form-control" placeholder="tag1, tag2, ...">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Remove Tags:</label>
+                            <input type="text" id="batch-remove-tags" class="form-control" placeholder="tag1, tag2, ...">
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="batch-suspend">
+                            <label class="form-check-label" for="batch-suspend">
+                                Suspend selected cards
+                            </label>
+                        </div>
+                        <div class="batch-edit-controls">
+                            <button id="select-all-batch" class="btn btn-sm btn-outline-primary me-1">Select All</button>
+                            <button id="deselect-all-batch" class="btn btn-sm btn-outline-secondary me-1">Deselect</button>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="apply-batch-edits" class="btn btn-primary">Apply</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -599,26 +634,6 @@
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                         <button type="button" class="btn btn-primary" id="start-custom-study">Start Studying</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Statistics Modal -->
-        <div class="modal fade" id="stats-modal" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title"><i class="bi bi-bar-chart me-2"></i>Study Statistics</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div id="detailed-stats-container">
-                            <!-- Detailed stats will be rendered here by JavaScript -->
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     </div>
                 </div>
             </div>
@@ -670,11 +685,6 @@
                                 <p>Track your learning progress with detailed statistics and a heatmap of your study activity.</p>
                             </div>
                         </div>
-                        
-                        <hr>
-                        
-                        <h6><i class="bi bi-shield-check me-2"></i>Authentication</h6>
-                        <p>Your connection with Microsoft is secure and only accesses your OneNote content. We don't store your Microsoft credentials.</p>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -689,36 +699,6 @@
     
     <!-- Bootstrap and App Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Emergency fix for login buttons -->
-    <script>
-      // Direct click handler for login buttons to ensure they work
-      document.addEventListener('DOMContentLoaded', () => {
-        console.log('Debug script running to fix login buttons');
-        
-        const mainBtn = document.getElementById('login-button-main');
-        const navBtn = document.getElementById('login-button');
-        
-        console.log('Main login button found:', !!mainBtn);
-        console.log('Nav login button found:', !!navBtn);
-        
-        if (mainBtn) {
-          mainBtn.onclick = function() {
-            console.log('Main login button clicked');
-            window.location.href = '/auth/signin';
-          };
-        }
-        
-        if (navBtn) {
-          navBtn.onclick = function() {
-            console.log('Nav login button clicked');
-            window.location.href = '/auth/signin';
-          };
-        }
-      });
-    </script>
-    
-    <!-- Main application script -->
     <script src="app.js"></script>
 </body>
 </html>
