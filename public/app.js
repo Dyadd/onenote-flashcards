@@ -2415,6 +2415,15 @@ function applySpacedRepetition(card, rating) {
     card.due = dueDate.toISOString();
 }
 
+// Replace or enhance your existing sync-related functions in app.js
+
+// Sync state tracking variables
+let syncStartTime = null;
+let pagesProcessed = 0;
+let cardsGenerated = 0;
+let syncLogVisible = false;
+let syncProgressInterval = null;
+
 // Perform quick sync (incremental)
 async function syncSection(notebookId, sectionId) {
     if (isSyncing) {
@@ -2423,9 +2432,14 @@ async function syncSection(notebookId, sectionId) {
     }
     
     try {
+        // Initialize sync UI
+        initSyncUI();
         isSyncing = true;
-        updateSyncStatus('Syncing...');
-        disableButtons(true);
+        updateSyncStatus('Starting quick sync...', 'active');
+        showSyncProgressBar(true);
+        updateSyncProgress(10);
+        
+        addSyncLogEntry('Starting quick sync for current section');
         
         // Call sync API
         const response = await fetch(`/api/sync/section/${sectionId}`, {
@@ -2441,25 +2455,48 @@ async function syncSection(notebookId, sectionId) {
             throw new Error(`Sync failed: ${response.status}`);
         }
         
+        updateSyncProgress(50);
+        addSyncLogEntry('Finished API sync, processing results');
+        
         const result = await response.json();
         
         // Reload flashcards after successful sync
         if (result.success) {
+            updateSyncProgress(75);
+            addSyncLogEntry(`Processing ${result.cardsUpdated} flashcards`);
+            
             await loadFlashcards();
+            updateSyncProgress(100);
+            
+            // Update stats
+            cardsGenerated = result.cardsUpdated;
+            updateSyncStats();
+            
+            addSyncLogEntry(`Sync complete - ${result.cardsUpdated} flashcards updated`, 'success');
+            updateSyncStatus(`Sync complete! Updated ${result.cardsUpdated} flashcards.`, 'success');
             showNotification(`Sync complete! Updated ${result.cardsUpdated} flashcards.`);
             
             // Save last sync info
             saveLastSyncInfo(notebookId, sectionId);
         } else {
+            updateSyncProgress(100);
+            addSyncLogEntry('Sync failed - server reported an error', 'error');
+            updateSyncStatus('Sync failed. Please try again.', 'error');
             showNotification('Sync failed. Please try again.', true);
         }
     } catch (error) {
         console.error('Sync error:', error);
+        updateSyncProgress(100);
+        addSyncLogEntry(`Sync error: ${error.message}`, 'error');
+        updateSyncStatus('Failed to sync. Please try again.', 'error');
         showNotification('Failed to sync. Please try again.', true);
     } finally {
+        // Clean up
         isSyncing = false;
-        updateSyncStatus('');
-        disableButtons(false);
+        setTimeout(() => {
+            showSyncProgressBar(false);
+            clearSyncProgressInterval();
+        }, 1500);
     }
 }
 
@@ -2476,9 +2513,17 @@ async function fullSync(notebookId, sectionId) {
     }
     
     try {
+        // Initialize sync UI
+        initSyncUI();
         isSyncing = true;
-        updateSyncStatus('Performing full sync...');
-        disableButtons(true);
+        updateSyncStatus('Starting full sync...', 'active');
+        showSyncProgressBar(true);
+        updateSyncProgress(5);
+        
+        addSyncLogEntry(`Starting full sync for notebook "${getNotebookName(notebookId)}"`);
+        
+        // Start a polling mechanism to check sync status from the server
+        startSyncStatusPolling(sectionId);
         
         // Call full sync API
         const response = await fetch(`/api/sync/full/${notebookId}/${sectionId}`, {
@@ -2494,41 +2539,242 @@ async function fullSync(notebookId, sectionId) {
             throw new Error(`Full sync failed: ${response.status}`);
         }
         
+        updateSyncProgress(80);
+        addSyncLogEntry('API sync completed, processing results');
+        
         const result = await response.json();
         
         // Reload flashcards after successful sync
         if (result.success) {
+            updateSyncProgress(90);
+            addSyncLogEntry(`Processing ${result.cardsUpdated} flashcards`);
+            
             await loadFlashcards();
+            updateSyncProgress(100);
+            
+            // Update stats
+            cardsGenerated = result.cardsUpdated;
+            updateSyncStats();
+            
+            addSyncLogEntry(`Sync complete - ${result.cardsUpdated} flashcards created`, 'success');
+            updateSyncStatus(`Sync complete! Created ${result.cardsUpdated} flashcards.`, 'success');
             showNotification(`Full sync complete! Created ${result.cardsUpdated} flashcards.`);
             
             // Save last sync info
             saveLastSyncInfo(notebookId, sectionId);
         } else {
+            updateSyncProgress(100);
+            addSyncLogEntry('Sync failed - server reported an error', 'error');
+            updateSyncStatus('Full sync failed. Please try again.', 'error');
             showNotification('Full sync failed. Please try again.', true);
         }
     } catch (error) {
         console.error('Full sync error:', error);
+        updateSyncProgress(100);
+        addSyncLogEntry(`Sync error: ${error.message}`, 'error');
+        updateSyncStatus('Failed to perform full sync. Please try again.', 'error');
         showNotification('Failed to perform full sync. Please try again.', true);
     } finally {
+        // Clean up
         isSyncing = false;
-        updateSyncStatus('');
-        disableButtons(false);
+        stopSyncStatusPolling();
+        setTimeout(() => {
+            showSyncProgressBar(false);
+            clearSyncProgressInterval();
+        }, 1500);
     }
 }
 
-// Save last sync information
-async function saveLastSyncInfo(notebookId, sectionId) {
-    try {
-        await fetch('/api/sync/save-last', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ notebookId, sectionId })
-        });
-    } catch (error) {
-        console.error('Error saving sync info:', error);
+// Initialize sync UI
+function initSyncUI() {
+    // Reset counters
+    syncStartTime = new Date();
+    pagesProcessed = 0;
+    cardsGenerated = 0;
+    
+    // Clear log
+    const syncLog = document.getElementById('sync-log');
+    if (syncLog) {
+        syncLog.innerHTML = '';
     }
+    
+    // Show details container
+    const detailsContainer = document.getElementById('sync-details-container');
+    if (detailsContainer) {
+        detailsContainer.style.display = 'block';
+    }
+    
+    // Update stats display
+    updateSyncStats();
+    
+    // Start time tracker
+    startSyncProgressInterval();
+    
+    // Set up log toggle button
+    const toggleLogBtn = document.getElementById('toggle-sync-log');
+    if (toggleLogBtn) {
+        toggleLogBtn.textContent = syncLogVisible ? 'Hide' : 'Show';
+        toggleLogBtn.onclick = toggleSyncLog;
+    }
+}
+
+// Update sync status message
+function updateSyncStatus(message, type = '') {
+    const syncStatus = document.getElementById('sync-status');
+    if (syncStatus) {
+        // Remove all status classes
+        syncStatus.classList.remove('active', 'error', 'success');
+        
+        // Add appropriate class if specified
+        if (type) {
+            syncStatus.classList.add(type);
+        }
+        
+        syncStatus.textContent = message;
+    }
+}
+
+// Update progress bar
+function updateSyncProgress(percent) {
+    const progressBar = document.getElementById('sync-progress-bar');
+    if (progressBar) {
+        progressBar.style.width = `${percent}%`;
+    }
+}
+
+// Show/hide progress bar
+function showSyncProgressBar(show) {
+    const progressContainer = document.getElementById('sync-progress-container');
+    if (progressContainer) {
+        progressContainer.style.display = show ? 'flex' : 'none';
+    }
+}
+
+// Add entry to sync log
+function addSyncLogEntry(message, type = '') {
+    const syncLog = document.getElementById('sync-log');
+    if (!syncLog) return;
+    
+    const entry = document.createElement('div');
+    entry.className = `sync-log-entry ${type}`;
+    
+    const now = new Date();
+    const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+    
+    let messageHtml = message;
+    // Highlight important parts (anything in quotes)
+    messageHtml = messageHtml.replace(/"([^"]+)"/g, '"<span class="highlight">$1</span>"');
+    
+    entry.innerHTML = `
+        <span class="timestamp">${timestamp}</span>
+        <span class="message">${messageHtml}</span>
+    `;
+    
+    syncLog.appendChild(entry);
+    syncLog.scrollTop = syncLog.scrollHeight;
+}
+
+// Toggle sync log visibility
+function toggleSyncLog() {
+    const syncLog = document.getElementById('sync-log');
+    const toggleBtn = document.getElementById('toggle-sync-log');
+    
+    if (!syncLog || !toggleBtn) return;
+    
+    syncLogVisible = !syncLogVisible;
+    syncLog.style.display = syncLogVisible ? 'block' : 'none';
+    toggleBtn.textContent = syncLogVisible ? 'Hide' : 'Show';
+}
+
+// Update sync statistics
+function updateSyncStats() {
+    const pagesElement = document.getElementById('pages-processed');
+    const cardsElement = document.getElementById('cards-generated');
+    const timeElement = document.getElementById('time-elapsed');
+    
+    if (pagesElement) pagesElement.textContent = pagesProcessed;
+    if (cardsElement) cardsElement.textContent = cardsGenerated;
+    
+    if (timeElement && syncStartTime) {
+        const elapsedSeconds = Math.floor((new Date() - syncStartTime) / 1000);
+        const minutes = Math.floor(elapsedSeconds / 60);
+        const seconds = elapsedSeconds % 60;
+        timeElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+}
+
+// Start sync progress interval for time tracking
+function startSyncProgressInterval() {
+    clearSyncProgressInterval();
+    syncProgressInterval = setInterval(() => {
+        updateSyncStats();
+    }, 1000);
+}
+
+// Clear sync progress interval
+function clearSyncProgressInterval() {
+    if (syncProgressInterval) {
+        clearInterval(syncProgressInterval);
+        syncProgressInterval = null;
+    }
+}
+
+// Polling for sync status (simulate real-time updates)
+let syncStatusPollingInterval = null;
+
+function startSyncStatusPolling(sectionId) {
+    stopSyncStatusPolling();
+    
+    // Poll every 3 seconds
+    syncStatusPollingInterval = setInterval(async () => {
+        try {
+            const response = await fetch(`/api/sync/status`);
+            if (!response.ok) return;
+            
+            const data = await response.json();
+            
+            // Check for section-specific data
+            if (data[sectionId]) {
+                const sectionData = data[sectionId];
+                
+                // Update progress based on section data
+                if (sectionData.pages) {
+                    pagesProcessed = sectionData.pages;
+                    updateSyncProgress(Math.min(75, 5 + (pagesProcessed * 10)));
+                    updateSyncStats();
+                    addSyncLogEntry(`Found ${pagesProcessed} pages to process`);
+                }
+            }
+            
+            // Update for any current operations
+            if (data.currentOperation) {
+                updateSyncStatus(`${data.currentOperation}...`, 'active');
+                addSyncLogEntry(data.currentOperation);
+            }
+            
+        } catch (error) {
+            console.log('Error polling sync status:', error);
+        }
+    }, 3000);
+}
+
+function stopSyncStatusPolling() {
+    if (syncStatusPollingInterval) {
+        clearInterval(syncStatusPollingInterval);
+        syncStatusPollingInterval = null;
+    }
+}
+
+// Helper to get notebook name
+function getNotebookName(notebookId) {
+    const notebookSelect = document.getElementById('notebook-select');
+    if (notebookSelect) {
+        const option = notebookSelect.querySelector(`option[value="${notebookId}"]`);
+        if (option) {
+            return option.textContent;
+        }
+    }
+    return 'Selected notebook';
 }
 
 // Load saved selection from localStorage
@@ -3162,21 +3408,6 @@ function createNotificationElement() {
     notification.className = 'notification';
     document.body.appendChild(notification);
     return notification;
-}
-
-function updateSyncStatus(message) {
-    const syncStatus = document.getElementById('sync-status');
-    if (syncStatus) {
-        syncStatus.textContent = message;
-    }
-}
-
-function disableButtons(disable) {
-    const syncButton = document.getElementById('sync-button');
-    const fullSyncButton = document.getElementById('full-sync-button');
-    
-    if (syncButton) syncButton.disabled = disable;
-    if (fullSyncButton) fullSyncButton.disabled = disable;
 }
 
 // Ensure compatibility with touch devices

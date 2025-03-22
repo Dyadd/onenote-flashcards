@@ -273,9 +273,41 @@
                                 </button>
                             </div>
                             
-                            <div id="sync-status" class="text-center text-muted mt-2"></div>
-                            <div class="progress d-none" id="sync-progress-container">
-                                <div id="sync-progress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                            <!-- Replace the current sync status element in the notebooks view -->
+
+                            <div class="sync-progress-container">
+                                <div id="sync-status" class="sync-status-message">Ready to sync</div>
+                                
+                                <div id="sync-progress-container" class="progress mb-2" style="display: none;">
+                                <div id="sync-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
+                                </div>
+                                
+                                <div id="sync-details-container" class="sync-details" style="display: none;">
+                                <div class="sync-stats">
+                                    <div class="sync-stat">
+                                    <span id="pages-processed" class="sync-stat-value">0</span>
+                                    <span class="sync-stat-label">Pages Processed</span>
+                                    </div>
+                                    <div class="sync-stat">
+                                    <span id="cards-generated" class="sync-stat-value">0</span>
+                                    <span class="sync-stat-label">Cards Generated</span>
+                                    </div>
+                                    <div class="sync-stat">
+                                    <span id="time-elapsed" class="sync-stat-value">0:00</span>
+                                    <span class="sync-stat-label">Time Elapsed</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="sync-log-container">
+                                    <div class="sync-log-header">
+                                    <span>Sync Log</span>
+                                    <button id="toggle-sync-log" class="btn btn-sm btn-link p-0">Show</button>
+                                    </div>
+                                    <div id="sync-log" class="sync-log" style="display: none;">
+                                    <!-- Log entries will be added here -->
+                                    </div>
+                                </div>
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -807,3 +807,145 @@ body.night-mode .modal-footer {
 body.night-mode .btn-close {
     filter: invert(1) grayscale(100%) brightness(200%);
 }
+
+
+
+/* Enhanced Sync Progress UI */
+.sync-progress-container {
+  margin: 1.5rem 0;
+}
+
+.sync-status-message {
+  text-align: center;
+  margin-bottom: 0.75rem;
+  font-weight: 500;
+  color: #505050;
+  transition: color 0.3s ease;
+}
+
+.sync-status-message.active {
+  color: #0d6efd;
+}
+
+.sync-status-message.error {
+  color: #dc3545;
+}
+
+.sync-status-message.success {
+  color: #198754;
+}
+
+.sync-details {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.sync-stats {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.sync-stat {
+  text-align: center;
+  flex: 1;
+}
+
+.sync-stat-value {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #0d6efd;
+}
+
+.sync-stat-label {
+  font-size: 0.85rem;
+  color: #6c757d;
+}
+
+.sync-log-container {
+  margin-top: 0.5rem;
+}
+
+.sync-log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #495057;
+}
+
+.sync-log {
+  max-height: 150px;
+  overflow-y: auto;
+  background-color: #f1f3f5;
+  border-radius: 4px;
+  padding: 0.75rem;
+  font-family: monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.sync-log-entry {
+  margin-bottom: 0.35rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px dashed #e9ecef;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.sync-log-entry:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.sync-log-entry .timestamp {
+  color: #6c757d;
+  margin-right: 0.5rem;
+}
+
+.sync-log-entry .message {
+  color: #212529;
+}
+
+.sync-log-entry .highlight {
+  color: #0d6efd;
+  font-weight: 500;
+}
+
+/* Night mode adjustments */
+body.night-mode .sync-details {
+  background-color: #2d2d2d;
+}
+
+body.night-mode .sync-log {
+  background-color: #222;
+}
+
+body.night-mode .sync-log-entry .message {
+  color: #e0e0e0;
+}
+
+body.night-mode .sync-stat-value {
+  color: #5b9aff;
+}
+
+body.night-mode .sync-status-message {
+  color: #ccc;
+}
+
+body.night-mode .sync-status-message.active {
+  color: #5b9aff;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
