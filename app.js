@@ -696,6 +696,26 @@ app.get('/api/flashcards', ensureAuthenticated, (req, res) => {
   }
 });
 
+app.post('/api/flashcards/update', ensureAuthenticated, (req, res) => {
+  try {
+    const userId = req.session.userId || 'default-user';
+    const updatedFlashcards = req.body;
+    
+    // Load all flashcards
+    const allFlashcards = loadFlashcards();
+    
+    // Update only this user's flashcards
+    allFlashcards[userId] = updatedFlashcards;
+    
+    // Save back to storage
+    saveFlashcards(allFlashcards);
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get flashcards for a specific page
 app.get('/api/flashcards/page/:pageId', ensureAuthenticated, (req, res) => {
   try {

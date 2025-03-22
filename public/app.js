@@ -1693,23 +1693,23 @@ async function loadFlashcards() {
                         const existingData = existingCardsByQuestion[serverCard.question];
                         
                         if (existingData) {
-                            // Preserve study data (interval, ease, due date, tags, etc.)
-                            serverCard.interval = existingData.card.interval || 0;
-                            serverCard.ease = existingData.card.ease || EASE_FACTOR_DEFAULT;
-                            serverCard.due = existingData.card.due || null;
-                            serverCard.reviewCount = existingData.card.reviewCount || 0;
-                            serverCard.tags = existingData.card.tags || [];
-                            serverCard.suspended = existingData.card.suspended || false;
+                            // Preserve study data with priority to server data if available
+                            serverCard.interval = serverCard.interval !== undefined ? serverCard.interval : existingData.card.interval || 0;
+                            serverCard.ease = serverCard.ease !== undefined ? serverCard.ease : existingData.card.ease || EASE_FACTOR_DEFAULT;
+                            serverCard.due = serverCard.due !== undefined ? serverCard.due : existingData.card.due || null;
+                            serverCard.reviewCount = serverCard.reviewCount !== undefined ? serverCard.reviewCount : existingData.card.reviewCount || 0;
+                            serverCard.tags = serverCard.tags || existingData.card.tags || [];
+                            serverCard.suspended = serverCard.suspended !== undefined ? serverCard.suspended : existingData.card.suspended || false;
                         } else {
                             // This is a new card, initialize study data
-                            serverCard.interval = 0;
-                            serverCard.ease = EASE_FACTOR_DEFAULT;
-                            serverCard.due = null;
-                            serverCard.reviewCount = 0;
-                            serverCard.tags = [];
-                            serverCard.suspended = false;
+                            serverCard.interval = serverCard.interval || 0;
+                            serverCard.ease = serverCard.ease || EASE_FACTOR_DEFAULT;
+                            serverCard.due = serverCard.due || null;
+                            serverCard.reviewCount = serverCard.reviewCount || 0;
+                            serverCard.tags = serverCard.tags || [];
+                            serverCard.suspended = serverCard.suspended || false;
                         }
-                        
+                                                
                         updatedCards.push(serverCard);
                     });
                     
@@ -2255,38 +2255,37 @@ function toggleAnswer() {
 }
 
 // Answer current card (spaced repetition)
-function answerCard(rating) {
-    // Get current card
-    if (!currentPageId || !allFlashcards[currentPageId]) return;
-    
-    const cards = allFlashcards[currentPageId].cards;
-    if (!cards || currentCardIndex >= cards.length) return;
-    
-    const card = cards[currentCardIndex];
-    
-    // Apply spaced repetition algorithm
-    applySpacedRepetition(card, rating);
-    
-    // Record review
-    recordCardReview(currentCardIndex, currentPageId, rating);
-    
-    // Save changes
-    saveFlashcardsToLocalStorage();
-    
-    // Show next card or loop to beginning if at end
-    if (currentCardIndex < cards.length - 1) {
-        showNextCard();
-    } else {
-        // Reset to first card if at end
-        currentCardIndex = 0;
-        displayCurrentCard();
-        
-        // Show completion message
-        showNotification('Deck complete! Starting over from the beginning.');
-    }
-    
-    // Update due counts
-    updateDueCounts();
+function answerStudyCard(rating) {
+  // Get current item from queue
+  if (studySession.currentIndex >= studySession.queue.length) return;
+  
+  const { pageId, cardIndex } = studySession.queue[studySession.currentIndex];
+  
+  // Get card
+  if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) {
+    // Skip invalid card
+    studySession.currentIndex++;
+    showStudyCard();
+    return;
+  }
+  
+  const card = allFlashcards[pageId].cards[cardIndex];
+  
+  // Apply spaced repetition algorithm
+  applySpacedRepetition(card, rating);
+  
+  // Record review
+  recordCardReview(cardIndex, pageId, rating);
+  
+  // Save changes
+  saveFlashcardsToLocalStorage();
+  
+  // Also save to server
+  saveFlashcardsToServer();
+  
+  // Move to next card
+  studySession.currentIndex++;
+  showStudyCard();
 }
 
 // Start auto-advance timer
@@ -3359,6 +3358,34 @@ function saveFlashcardsToLocalStorage() {
             }
         }
     }
+}
+
+async function saveFlashcardsToServer() {
+  try {
+    // Only attempt if authenticated
+    const authStatus = await checkAuthStatus();
+    if (!authStatus.authenticated) return;
+    
+    showLoading('Saving progress...');
+    
+    const response = await fetch('/api/flashcards/update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(allFlashcards)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to save flashcards: ${response.status}`);
+    }
+    
+    hideLoading();
+    console.log('Saved study progress to server');
+  } catch (error) {
+    hideLoading();
+    console.error('Error saving flashcards to server:', error);
+  }
 }
 
 // Load flashcards from localStorage
