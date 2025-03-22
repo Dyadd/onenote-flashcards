@@ -169,6 +169,31 @@ async function init() {
         // Check URL for direct flashcard access
         checkUrlParameters();
         
+        // Check for interrupted study session
+        const savedSession = localStorage.getItem('studySession');
+        if (savedSession) {
+            try {
+                const parsedSession = JSON.parse(savedSession);
+                if (parsedSession.active && parsedSession.queue && parsedSession.queue.length > 0) {
+                    studySession = parsedSession;
+                    // Ask if user wants to continue
+                    if (confirm('Do you want to continue your previous study session?')) {
+                        showView('study');
+                        showStudyCard();
+                    } else {
+                        localStorage.removeItem('studySession');
+                        studySession = {
+                            active: false,
+                            queue: [],
+                            currentIndex: 0
+                        };
+                    }
+                }
+            } catch (e) {
+                console.error('Error parsing saved study session:', e);
+            }
+        }
+
         console.log('Initialization complete');
     } catch (error) {
         console.error('Initialization error:', error);
@@ -2265,6 +2290,7 @@ function answerStudyCard(rating) {
   if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) {
     // Skip invalid card
     studySession.currentIndex++;
+    saveStudySession();
     showStudyCard();
     return;
   }
@@ -3011,98 +3037,107 @@ function saveCardEdits() {
 }
 
 // Study session functions
+// Study session functions
 function startStudySession(includeDue, includeNew, limit, tags) {
-    // Create a queue of cards to study
-    const studyQueue = [];
+  // Create a queue of cards to study
+  const studyQueue = [];
+  const reviewCards = [];
+  const newCards = [];
+  
+  // First, collect all due cards
+  if (includeDue) {
+    const today = new Date();
     
-    // First, collect all due cards
-    if (includeDue) {
-        const today = new Date();
-        
-        Object.entries(allFlashcards).forEach(([pageId, page]) => {
-            if (!page.cards) return;
-            
-            page.cards.forEach((card, index) => {
-                // Check if card is due
-                if (card.due && new Date(card.due) <= today && !card.suspended) {
-                    // Check tags if specified
-                    const matchesTags = tags.length === 0 || 
-                        (card.tags && tags.some(tag => card.tags.includes(tag)));
-                    
-                    if (matchesTags) {
-                        studyQueue.push({
-                            pageId,
-                            cardIndex: index,
-                            type: 'review',
-                            due: new Date(card.due)
-                        });
-                    }
-                }
+    Object.entries(allFlashcards).forEach(([pageId, page]) => {
+      if (!page.cards) return;
+      
+      page.cards.forEach((card, index) => {
+        // Check if card is due
+        if (card.due && new Date(card.due) <= today && !card.suspended) {
+          // Check tags if specified
+          const matchesTags = tags.length === 0 || 
+            (card.tags && tags.some(tag => card.tags.includes(tag)));
+          
+          if (matchesTags) {
+            reviewCards.push({
+              pageId,
+              cardIndex: index,
+              type: 'review',
+              due: new Date(card.due)
             });
-        });
-    }
-    
-    // Sort review cards by due date (earliest first)
-    studyQueue.sort((a, b) => a.due - b.due);
-    
-    // Then, add new cards if needed
-    if (includeNew) {
-        const newCards = [];
-        
-        Object.entries(allFlashcards).forEach(([pageId, page]) => {
-            if (!page.cards) return;
-            
-            page.cards.forEach((card, index) => {
-                // Check if card is new (never reviewed)
-                if (!card.due && !card.suspended) {
-                    // Check tags if specified
-                    const matchesTags = tags.length === 0 || 
-                        (card.tags && tags.some(tag => card.tags.includes(tag)));
-                    
-                    if (matchesTags) {
-                        newCards.push({
-                            pageId,
-                            cardIndex: index,
-                            type: 'new'
-                        });
-                    }
-                }
-            });
-        });
-        
-        // Sort new cards according to settings
-        if (userSettings.cardOrderNew === 'random') {
-            // Shuffle new cards
-            for (let i = newCards.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [newCards[i], newCards[j]] = [newCards[j], newCards[i]];
-            }
+          }
         }
-        
-        // Add to the study queue
-        studyQueue.push(...newCards);
+      });
+    });
+  }
+  
+  // Sort review cards by due date (earliest first)
+  reviewCards.sort((a, b) => a.due - b.due);
+  
+  // Limit review cards based on user settings
+  const maxReviews = Math.min(userSettings.reviewsPerDay, limit);
+  const limitedReviewCards = reviewCards.slice(0, maxReviews);
+  studyQueue.push(...limitedReviewCards);
+  
+  // Then, collect new cards if needed
+  if (includeNew) {
+    Object.entries(allFlashcards).forEach(([pageId, page]) => {
+      if (!page.cards) return;
+      
+      page.cards.forEach((card, index) => {
+        // Check if card is new (never reviewed)
+        if (!card.due && !card.suspended) {
+          // Check tags if specified
+          const matchesTags = tags.length === 0 || 
+            (card.tags && tags.some(tag => card.tags.includes(tag)));
+          
+          if (matchesTags) {
+            newCards.push({
+              pageId,
+              cardIndex: index,
+              type: 'new'
+            });
+          }
+        }
+      });
+    });
+    
+    // Sort new cards according to settings
+    if (userSettings.cardOrderNew === 'random') {
+      // Shuffle new cards
+      for (let i = newCards.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newCards[i], newCards[j]] = [newCards[j], newCards[i]];
+      }
     }
     
-    // Limit to specified number
-    const limitedQueue = studyQueue.slice(0, limit);
-    
-    // If no cards to study, show message
-    if (limitedQueue.length === 0) {
-        showNotification('No cards to study based on your criteria.', true);
-        return;
-    }
-    
-    // Store queue in study session
-    studySession = {
-        active: true,
-        queue: limitedQueue,
-        currentIndex: 0,
-        startTime: new Date()
-    };
-    
-    // Begin study mode
-    showView('study');
-    showStudyCard();
+    // Limit new cards based on user settings and remaining limit
+    const remainingLimit = limit - limitedReviewCards.length;
+    const maxNewCards = Math.min(userSettings.newCardsPerDay, remainingLimit);
+    const limitedNewCards = newCards.slice(0, maxNewCards);
+    studyQueue.push(...limitedNewCards);
+  }
+  
+  // If no cards to study, show message
+  if (studyQueue.length === 0) {
+    showNotification('No cards to study based on your criteria.', true);
+    return;
+  }
+  
+  // Store queue in study session
+  studySession = {
+    active: true,
+    queue: studyQueue,
+    currentIndex: 0,
+    startTime: new Date()
+  };
+  
+  // Save session state
+  saveStudySession();
+  
+  // Begin study mode
+  showView('study');
+  showStudyCard();
 }
 
 function showStudyCard() {
@@ -3317,8 +3352,21 @@ function showStudyCompletion() {
 }
 
 function exitStudyMode() {
-    // Study session already handled in showView('home')
-    showView('home');
+  // Mark study session as inactive
+  studySession.active = false;
+  saveStudySession();
+  
+  // Study session already handled in showView('home')
+  showView('home');
+}
+
+// Save study session to localStorage
+function saveStudySession() {
+  try {
+    localStorage.setItem('studySession', JSON.stringify(studySession));
+  } catch (error) {
+    console.error('Error saving study session:', error);
+  }
 }
 
 // Save flashcards to localStorage (for persistence between syncs)

@@ -300,6 +300,14 @@ body.night-mode .deck-index {
     color: white;
 }
 
+.hidden {
+    display: none !important;
+}
+
+.answer.hidden, .study-answer.hidden {
+    display: none !important;
+}
+
 /* Study mode styles */
 .study-mode {
     padding: 2rem;
