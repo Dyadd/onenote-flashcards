@@ -57,20 +57,21 @@ function showView(viewName) {
         currentView = viewName;
         
         // Update active state in navigation
-        document.querySelectorAll('.nav-link').forEach(link => {
-            link.classList.remove('active');
+        document.querySelectorAll('.nav-list .nav-item').forEach(item => {
+            item.classList.remove('active');
         });
         
-        const activeNavLink = document.querySelector(`.nav-link[data-view="${viewName}"]`);
-        if (activeNavLink) {
-            activeNavLink.classList.add('active');
+        // Find the corresponding nav item and make it active
+        const navItem = document.getElementById(`nav-${viewName}`);
+        if (navItem) {
+            navItem.classList.add('active');
         }
         
         // Handle special view initialization
         if (viewName === 'study' && studySession.active) {
             updateStudyStatusDisplay();
         } else if (viewName === 'stats') {
-            updateDetailedStats(); // Refresh stats when viewing that page
+            updateDetailedStats();
         }
     } else {
         console.error(`View not found: ${viewName}`);
@@ -103,10 +104,11 @@ function updateViewsBasedOnAuth(isAuthenticated) {
 // Setup navigation
 function setupNavigation() {
     // Set up click handlers for main navigation
-    document.querySelectorAll('.nav-link').forEach(link => {
+    document.querySelectorAll('.nav-list .nav-item a[data-view]').forEach(link => {
         link.addEventListener('click', (e) => {
             const viewName = e.currentTarget.dataset.view;
             if (viewName) {
+                e.preventDefault();
                 showView(viewName);
             }
         });
@@ -115,7 +117,7 @@ function setupNavigation() {
     // Add back button support
     document.querySelectorAll('.back-button').forEach(button => {
         button.addEventListener('click', () => {
-            showView('home'); // Return to home/decks view
+            showView('home');
         });
     });
 }
