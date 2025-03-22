@@ -1781,143 +1781,127 @@ async function loadFlashcards() {
     }
 }
 
-// Render list of pages with flashcards
 function renderPagesList(filteredPageIds) {
-    console.log('Rendering pages list');
-    const pagesList = document.getElementById('pages-list');
-    if (!pagesList) return;
-    
-    // Clear the list
-    pagesList.innerHTML = '';
-    
-    // Get page IDs - either filtered or all
-    const pageIds = filteredPageIds || Object.keys(allFlashcards);
-    
-    // Check if we have any pages
-    if (pageIds.length === 0) {
-        const emptyItem = document.createElement('li');
-        emptyItem.className = 'list-group-item text-center';
-        emptyItem.innerHTML = filteredPageIds 
-            ? '<i class="bi bi-search me-2"></i>No matching flashcards found.' 
-            : '<i class="bi bi-info-circle me-2"></i>No flashcards yet. Sync to create them.';
-        pagesList.appendChild(emptyItem);
-        return;
-    }
-    
-    // Sort pages by title
-    pageIds.sort((a, b) => {
-        const titleA = allFlashcards[a]?.pageTitle || '';
-        const titleB = allFlashcards[b]?.pageTitle || '';
-        return titleA.localeCompare(titleB);
-    });
-    
-    // Add each page to the list
-    pageIds.forEach(pageId => {
-        if (!allFlashcards[pageId]) return;
-        
-        const pageData = allFlashcards[pageId];
-        if (!pageData.cards) pageData.cards = [];
-        
-        // Count cards by status
-        let dueCount = 0;
-        let newCount = 0;
-        const today = new Date();
-        
-        pageData.cards.forEach(card => {
-            if (card.suspended) return; // Skip suspended cards
-            
-            if (!card.due) {
-                // New card
-                newCount++;
-            } else if (new Date(card.due) <= today) {
-                // Due card
-                dueCount++;
-            }
-        });
-        
-        const totalCards = pageData.cards.length;
-        
-        // Create list item
-        const listItem = document.createElement('li');
-        listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
-        listItem.dataset.pageId = pageId;
-        
-        // Highlight current page
-        if (pageId === currentPageId) {
-            listItem.classList.add('active');
-        }
-        
-        // Create content div
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'd-flex flex-column';
-        
-        // Page title
-        const titleSpan = document.createElement('span');
-        titleSpan.className = 'page-title';
-        titleSpan.textContent = pageData.pageTitle;
-        contentDiv.appendChild(titleSpan);
-        
-        // Status badges (if have due/new cards)
-        if (dueCount > 0 || newCount > 0) {
-            const badgesDiv = document.createElement('div');
-            badgesDiv.className = 'mt-1';
-            
-            if (dueCount > 0) {
-                const dueBadge = document.createElement('span');
-                dueBadge.className = 'badge bg-info me-1';
-                dueBadge.textContent = `${dueCount} due`;
-                badgesDiv.appendChild(dueBadge);
-            }
-            
-            if (newCount > 0) {
-                const newBadge = document.createElement('span');
-                newBadge.className = 'badge bg-primary me-1';
-                newBadge.textContent = `${newCount} new`;
-                badgesDiv.appendChild(newBadge);
-            }
-            
-            contentDiv.appendChild(badgesDiv);
-        }
-        
-        // Total card count badge
-        const badge = document.createElement('span');
-        badge.className = 'badge bg-secondary rounded-pill';
-        badge.textContent = totalCards;
-        
-        // Last updated tooltip
-        if (pageData.lastUpdated) {
-            const lastUpdated = new Date(pageData.lastUpdated);
-            listItem.title = `Last updated: ${lastUpdated.toLocaleString()}`;
-        }
-        
-        // Add elements to list item
-        listItem.appendChild(contentDiv);
-        listItem.appendChild(badge);
-        
-        // Add click handler
-        listItem.addEventListener('click', () => selectPage(pageId));
-        
-        // Add to list
-        pagesList.appendChild(listItem);
-    });
-    
-    // Show count of results
-    const resultCount = document.createElement('div');
-    resultCount.className = 'text-muted small mt-2';
-    resultCount.textContent = `Showing ${pageIds.length} pages`;
-    
-    // Remove any existing count
-    const existingCount = document.querySelector('.card-body .text-muted.small.mt-2');
-    if (existingCount) {
-        existingCount.remove();
-    }
-    
-    // Add count to container
-    const container = pagesList.closest('.card-body');
-    if (container) {
-        container.appendChild(resultCount);
-    }
+  console.log('Rendering pages list');
+  const pagesList = document.getElementById('pages-list');
+  if (!pagesList) return;
+  
+  // Clear the list
+  pagesList.innerHTML = '';
+  
+  // Get page IDs - either filtered or all
+  const pageIds = filteredPageIds || Object.keys(allFlashcards);
+  
+  // Check if we have any pages
+  if (pageIds.length === 0) {
+      const emptyItem = document.createElement('li');
+      emptyItem.className = 'list-group-item text-center';
+      emptyItem.innerHTML = filteredPageIds 
+          ? '<i class="bi bi-search me-2"></i>No matching flashcards found.' 
+          : '<i class="bi bi-info-circle me-2"></i>No flashcards yet. Sync to create them.';
+      pagesList.appendChild(emptyItem);
+      return;
+  }
+  
+  // Sort pages by title
+  pageIds.sort((a, b) => {
+      const titleA = allFlashcards[a]?.pageTitle || '';
+      const titleB = allFlashcards[b]?.pageTitle || '';
+      return titleA.localeCompare(titleB);
+  });
+  
+  // Add each page to the list with numbered index
+  pageIds.forEach((pageId, index) => {
+      if (!allFlashcards[pageId]) return;
+      
+      const pageData = allFlashcards[pageId];
+      if (!pageData.cards) pageData.cards = [];
+      
+      // Count cards by status
+      let dueCount = 0;
+      let newCount = 0;
+      let inProgressCount = 0;
+      const today = new Date();
+      
+      pageData.cards.forEach(card => {
+          if (card.suspended) return; // Skip suspended cards
+          
+          if (!card.due) {
+              // New card
+              newCount++;
+          } else if (new Date(card.due) <= today) {
+              // Due card
+              dueCount++;
+          } else if (card.reviewCount && card.reviewCount > 0) {
+              // In progress (reviewed but not due)
+              inProgressCount++;
+          }
+      });
+      
+      const totalCards = pageData.cards.length;
+      
+      // Create list item
+      const listItem = document.createElement('li');
+      listItem.className = 'list-group-item deck-item d-flex justify-content-between align-items-center';
+      listItem.dataset.pageId = pageId;
+      
+      // Highlight current page
+      if (pageId === currentPageId) {
+          listItem.classList.add('active');
+      }
+      
+      // Create deck index and title
+      const titleSection = document.createElement('div');
+      titleSection.className = 'deck-title';
+      titleSection.innerHTML = `
+          <span class="deck-index">${index + 1}.</span>
+          <span class="deck-name">${pageData.pageTitle}</span>
+      `;
+      
+      // Create card counts section (Anki style)
+      const countsSection = document.createElement('div');
+      countsSection.className = 'deck-counts';
+      
+      // Only show counts if we have cards
+      if (totalCards > 0) {
+          countsSection.innerHTML = `
+              <span class="count new" title="New cards">${newCount}</span>
+              <span class="count due" title="Cards due to review">${dueCount}</span>
+              <span class="count learned" title="Cards in progress">${inProgressCount}</span>
+          `;
+      } else {
+          countsSection.innerHTML = `<span class="count empty">0</span>`;
+      }
+      
+      // Add elements to list item
+      listItem.appendChild(titleSection);
+      listItem.appendChild(countsSection);
+      
+      // Add click handler
+      listItem.addEventListener('click', () => selectPage(pageId));
+      
+      // Add to list
+      pagesList.appendChild(listItem);
+  });
+  
+  // Show count of results
+  const resultCount = document.createElement('div');
+  resultCount.className = 'text-muted small mt-2';
+  resultCount.textContent = `Showing ${pageIds.length} decks`;
+  
+  // Remove any existing count
+  const existingCount = document.querySelector('.card-body .text-muted.small.mt-2');
+  if (existingCount) {
+      existingCount.remove();
+  }
+  
+  // Add count to container
+  const container = pagesList.closest('.card-body');
+  if (container) {
+      container.appendChild(resultCount);
+  }
 }
+
 
 // Filter pages by search term and other filters
 function filterPages(searchTerm) {
