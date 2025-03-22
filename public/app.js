@@ -24,6 +24,7 @@ let studySession = {
     currentIndex: 0
 };
 let currentView = 'home'; // Track current view for navigation
+let pendingSaves = []; // For offline handling
 
 // Card scheduling constants (Anki-like algorithms)
 const EASE_FACTOR_DEFAULT = 2.5;
@@ -194,10 +195,64 @@ async function init() {
             }
         }
 
+        // Set up online/offline detection for saving to server
+        window.addEventListener('online', processPendingSaves);
+        window.addEventListener('offline', () => {
+            console.log('Device is offline. Saves will be queued.');
+        });
+        
         console.log('Initialization complete');
     } catch (error) {
         console.error('Initialization error:', error);
         showNotification('Error initializing app. Please refresh the page.', true);
+    }
+}
+
+// Process any pending saves when coming back online
+async function processPendingSaves() {
+    if (!navigator.onLine || pendingSaves.length === 0) return;
+    
+    console.log(`Processing ${pendingSaves.length} pending saves`);
+    
+    try {
+        showLoading('Syncing saved changes...');
+        
+        // Process oldest first (sort by timestamp)
+        pendingSaves.sort((a, b) => a.timestamp - b.timestamp);
+        
+        // Try to save each one
+        for (let i = 0; i < pendingSaves.length; i++) {
+            const saveData = pendingSaves[i];
+            try {
+                const response = await fetch('/api/flashcards/update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(saveData.data)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to process save: ${response.status}`);
+                }
+            } catch (error) {
+                console.error('Error processing save:', error);
+                // If we fail, leave remaining saves in the queue
+                pendingSaves = pendingSaves.slice(i);
+                localStorage.setItem('pendingSaves', JSON.stringify(pendingSaves));
+                hideLoading();
+                return;
+            }
+        }
+        
+        // If we get here, all saves were processed
+        pendingSaves = [];
+        localStorage.removeItem('pendingSaves');
+        hideLoading();
+        console.log('All pending saves processed successfully');
+    } catch (error) {
+        console.error('Error processing pending saves:', error);
+        hideLoading();
     }
 }
 
@@ -372,12 +427,16 @@ function recordCardReview(cardIndex, pageId, result) {
         userStudyStats.cardsStudied++;
     }
     
-    // Add to review history
+    // Add to review history with enhanced data
     userStudyStats.reviewHistory.push({
         date: new Date().toISOString(),
         cardIndex: cardIndex,
         pageId: pageId,
-        result: result
+        cardId: card.id || `${pageId}-${cardIndex}`, // Add unique card identifier
+        result: result,
+        previousInterval: card.interval || 0,
+        newInterval: card.interval, // The newly calculated interval
+        ease: card.ease
     });
     
     // Ensure history doesn't grow too large (keep last 1000 reviews)
@@ -971,9 +1030,12 @@ function setupSearchListeners() {
     // Search input
     const searchInput = document.getElementById('search-input');
     if (searchInput) {
-        searchInput.addEventListener('input', function() {
+        // Use debounce for better performance
+        const debouncedSearch = debounce(function() {
             filterPages(this.value);
-        });
+        }, 300);
+        
+        searchInput.addEventListener('input', debouncedSearch);
     }
     
     // Clear search button
@@ -1565,6 +1627,20 @@ async function loadUserData() {
             renderPagesList();
         }
         
+        // Check for pending saves from offline mode
+        const pendingSavesJson = localStorage.getItem('pendingSaves');
+        if (pendingSavesJson) {
+            try {
+                pendingSaves = JSON.parse(pendingSavesJson);
+                if (navigator.onLine && pendingSaves.length > 0) {
+                    processPendingSaves();
+                }
+            } catch (e) {
+                console.error('Error loading pending saves:', e);
+                pendingSaves = [];
+            }
+        }
+        
         // Then load all flashcards from server
         await loadFlashcards();
         
@@ -1734,7 +1810,7 @@ async function loadFlashcards() {
                             serverCard.tags = serverCard.tags || [];
                             serverCard.suspended = serverCard.suspended || false;
                         }
-                                                
+                        
                         updatedCards.push(serverCard);
                     });
                     
@@ -1744,12 +1820,12 @@ async function loadFlashcards() {
                 } else {
                     // This is a new page, add it with initialized study data
                     pageData.cards.forEach(card => {
-                        card.interval = 0;
-                        card.ease = EASE_FACTOR_DEFAULT;
-                        card.due = null;
-                        card.reviewCount = 0;
-                        card.tags = [];
-                        card.suspended = false;
+                        card.interval = card.interval || 0;
+                        card.ease = card.ease || EASE_FACTOR_DEFAULT;
+                        card.due = card.due || null;
+                        card.reviewCount = card.reviewCount || 0;
+                        card.tags = card.tags || [];
+                        card.suspended = card.suspended || false;
                     });
                     
                     allFlashcards[pageId] = pageData;
@@ -1760,12 +1836,12 @@ async function loadFlashcards() {
             Object.entries(serverFlashcards).forEach(([pageId, pageData]) => {
                 if (pageData.cards) {
                     pageData.cards.forEach(card => {
-                        card.interval = 0;
-                        card.ease = EASE_FACTOR_DEFAULT;
-                        card.due = null;
-                        card.reviewCount = 0;
-                        card.tags = [];
-                        card.suspended = false;
+                        card.interval = card.interval || 0;
+                        card.ease = card.ease || EASE_FACTOR_DEFAULT;
+                        card.due = card.due || null;
+                        card.reviewCount = card.reviewCount || 0;
+                        card.tags = card.tags || [];
+                        card.suspended = card.suspended || false;
                     });
                 } else {
                     // Ensure cards array exists
@@ -2086,6 +2162,21 @@ function displayCurrentCard() {
     const cardDueDate = document.getElementById('card-due-date');
     const answerButtonsContainer = document.getElementById('answer-buttons-container');
     
+    // Always hide the answer when displaying a card
+    if (answerEl) {
+        answerEl.classList.add('hidden');
+    }
+    
+    // Always hide answer buttons when displaying a card
+    if (answerButtonsContainer) {
+        answerButtonsContainer.style.display = 'none';
+    }
+    
+    // Reset toggle button text
+    if (toggleButton) {
+        toggleButton.innerHTML = '<i class="bi bi-eye me-1"></i> Show Answer';
+    }
+    
     // Check if we have cards
     if (cards.length === 0) {
         if (questionEl) questionEl.innerHTML = '<i class="bi bi-info-circle me-2"></i>No flashcards available for this page';
@@ -2238,6 +2329,24 @@ function showNextCard() {
     const cards = allFlashcards[currentPageId].cards;
     if (currentCardIndex < cards.length - 1) {
         currentCardIndex++;
+        
+        // Make sure to hide answer and rating buttons when navigating
+        const answerEl = document.getElementById('answer');
+        const answerButtonsContainer = document.getElementById('answer-buttons-container');
+        
+        if (answerEl) {
+            answerEl.classList.add('hidden');
+        }
+        
+        if (answerButtonsContainer) {
+            answerButtonsContainer.style.display = 'none';
+        }
+        
+        const toggleButton = document.getElementById('toggle-button');
+        if (toggleButton) {
+            toggleButton.innerHTML = '<i class="bi bi-eye me-1"></i> Show Answer';
+        }
+        
         displayCurrentCard();
     }
 }
@@ -2246,6 +2355,24 @@ function showNextCard() {
 function showPreviousCard() {
     if (currentCardIndex > 0) {
         currentCardIndex--;
+        
+        // Make sure to hide answer and rating buttons when navigating
+        const answerEl = document.getElementById('answer');
+        const answerButtonsContainer = document.getElementById('answer-buttons-container');
+        
+        if (answerEl) {
+            answerEl.classList.add('hidden');
+        }
+        
+        if (answerButtonsContainer) {
+            answerButtonsContainer.style.display = 'none';
+        }
+        
+        const toggleButton = document.getElementById('toggle-button');
+        if (toggleButton) {
+            toggleButton.innerHTML = '<i class="bi bi-eye me-1"></i> Show Answer';
+        }
+        
         displayCurrentCard();
     }
 }
@@ -2280,38 +2407,60 @@ function toggleAnswer() {
 }
 
 // Answer current card (spaced repetition)
-function answerStudyCard(rating) {
-  // Get current item from queue
-  if (studySession.currentIndex >= studySession.queue.length) return;
-  
-  const { pageId, cardIndex } = studySession.queue[studySession.currentIndex];
-  
-  // Get card
-  if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) {
-    // Skip invalid card
-    studySession.currentIndex++;
-    saveStudySession();
-    showStudyCard();
-    return;
-  }
-  
-  const card = allFlashcards[pageId].cards[cardIndex];
-  
-  // Apply spaced repetition algorithm
-  applySpacedRepetition(card, rating);
-  
-  // Record review
-  recordCardReview(cardIndex, pageId, rating);
-  
-  // Save changes
-  saveFlashcardsToLocalStorage();
-  
-  // Also save to server
-  saveFlashcardsToServer();
-  
-  // Move to next card
-  studySession.currentIndex++;
-  showStudyCard();
+function answerCard(rating) {
+    // Get current card
+    if (!currentPageId || !allFlashcards[currentPageId]) return;
+    
+    const cards = allFlashcards[currentPageId].cards;
+    if (!cards || currentCardIndex >= cards.length) return;
+    
+    const card = cards[currentCardIndex];
+    
+    // Apply spaced repetition algorithm
+    applySpacedRepetition(card, rating);
+    
+    // Record review
+    recordCardReview(currentCardIndex, currentPageId, rating);
+    
+    // Save changes locally
+    saveFlashcardsToLocalStorage();
+    
+    // Save to server
+    saveFlashcardsToServer();
+    
+    // Hide answer and rating buttons before advancing
+    const answerEl = document.getElementById('answer');
+    const answerButtonsContainer = document.getElementById('answer-buttons-container');
+    
+    if (answerEl) {
+        answerEl.classList.add('hidden');
+    }
+    
+    if (answerButtonsContainer) {
+        answerButtonsContainer.style.display = 'none';
+    }
+    
+    // Show next card or loop to beginning if at end
+    if (currentCardIndex < cards.length - 1) {
+        currentCardIndex++;
+        displayCurrentCard();
+    } else {
+        // Reset to first card if at end
+        currentCardIndex = 0;
+        displayCurrentCard();
+        
+        // Show completion message
+        showNotification('Deck complete! Starting over from the beginning.');
+    }
+    
+    // Reset toggle button text
+    const toggleButton = document.getElementById('toggle-button');
+    if (toggleButton) {
+        toggleButton.innerHTML = '<i class="bi bi-eye me-1"></i> Show Answer';
+    }
+    
+    // Update due counts
+    updateDueCounts();
 }
 
 // Start auto-advance timer
@@ -2802,6 +2951,28 @@ function getNotebookName(notebookId) {
     return 'Selected notebook';
 }
 
+// Save last sync info to API
+async function saveLastSyncInfo(notebookId, sectionId) {
+    try {
+        const response = await fetch('/api/sync/save-last', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                notebookId,
+                sectionId
+            })
+        });
+        
+        if (!response.ok) {
+            console.error('Failed to save last sync info:', response.status);
+        }
+    } catch (error) {
+        console.error('Error saving last sync info:', error);
+    }
+}
+
 // Load saved selection from localStorage
 function loadLastSelection() {
     const savedSelection = localStorage.getItem('lastSelection');
@@ -2940,6 +3111,7 @@ function applyBatchEdits() {
     
     // Save changes
     saveFlashcardsToLocalStorage();
+    saveFlashcardsToServer();
     
     // Remove checkboxes
     const checkboxes = document.querySelectorAll('.batch-select');
@@ -3027,6 +3199,7 @@ function saveCardEdits() {
     
     // Save changes
     saveFlashcardsToLocalStorage();
+    saveFlashcardsToServer();
     
     // Update UI
     closeCardEditor();
@@ -3037,107 +3210,115 @@ function saveCardEdits() {
 }
 
 // Study session functions
-// Study session functions
 function startStudySession(includeDue, includeNew, limit, tags) {
-  // Create a queue of cards to study
-  const studyQueue = [];
-  const reviewCards = [];
-  const newCards = [];
-  
-  // First, collect all due cards
-  if (includeDue) {
-    const today = new Date();
+    // Create a queue of cards to study
+    const studyQueue = [];
+    const reviewCards = [];
+    const newCards = [];
     
-    Object.entries(allFlashcards).forEach(([pageId, page]) => {
-      if (!page.cards) return;
-      
-      page.cards.forEach((card, index) => {
-        // Check if card is due
-        if (card.due && new Date(card.due) <= today && !card.suspended) {
-          // Check tags if specified
-          const matchesTags = tags.length === 0 || 
-            (card.tags && tags.some(tag => card.tags.includes(tag)));
-          
-          if (matchesTags) {
-            reviewCards.push({
-              pageId,
-              cardIndex: index,
-              type: 'review',
-              due: new Date(card.due)
+    // First, collect all due cards
+    if (includeDue) {
+        const today = new Date();
+        
+        Object.entries(allFlashcards).forEach(([pageId, page]) => {
+            if (!page.cards) return;
+            
+            page.cards.forEach((card, index) => {
+                // Check if card is due
+                if (card.due && new Date(card.due) <= today && !card.suspended) {
+                    // Check tags if specified
+                    const matchesTags = tags.length === 0 || 
+                        (card.tags && tags.some(tag => card.tags.includes(tag)));
+                    
+                    if (matchesTags) {
+                        reviewCards.push({
+                            pageId,
+                            cardIndex: index,
+                            type: 'review',
+                            due: new Date(card.due)
+                        });
+                    }
+                }
             });
-          }
-        }
-      });
-    });
-  }
-  
-  // Sort review cards by due date (earliest first)
-  reviewCards.sort((a, b) => a.due - b.due);
-  
-  // Limit review cards based on user settings
-  const maxReviews = Math.min(userSettings.reviewsPerDay, limit);
-  const limitedReviewCards = reviewCards.slice(0, maxReviews);
-  studyQueue.push(...limitedReviewCards);
-  
-  // Then, collect new cards if needed
-  if (includeNew) {
-    Object.entries(allFlashcards).forEach(([pageId, page]) => {
-      if (!page.cards) return;
-      
-      page.cards.forEach((card, index) => {
-        // Check if card is new (never reviewed)
-        if (!card.due && !card.suspended) {
-          // Check tags if specified
-          const matchesTags = tags.length === 0 || 
-            (card.tags && tags.some(tag => card.tags.includes(tag)));
-          
-          if (matchesTags) {
-            newCards.push({
-              pageId,
-              cardIndex: index,
-              type: 'new'
-            });
-          }
-        }
-      });
-    });
-    
-    // Sort new cards according to settings
-    if (userSettings.cardOrderNew === 'random') {
-      // Shuffle new cards
-      for (let i = newCards.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [newCards[i], newCards[j]] = [newCards[j], newCards[i]];
-      }
+        });
     }
     
-    // Limit new cards based on user settings and remaining limit
-    const remainingLimit = limit - limitedReviewCards.length;
-    const maxNewCards = Math.min(userSettings.newCardsPerDay, remainingLimit);
-    const limitedNewCards = newCards.slice(0, maxNewCards);
-    studyQueue.push(...limitedNewCards);
-  }
-  
-  // If no cards to study, show message
-  if (studyQueue.length === 0) {
-    showNotification('No cards to study based on your criteria.', true);
-    return;
-  }
-  
-  // Store queue in study session
-  studySession = {
-    active: true,
-    queue: studyQueue,
-    currentIndex: 0,
-    startTime: new Date()
-  };
-  
-  // Save session state
-  saveStudySession();
-  
-  // Begin study mode
-  showView('study');
-  showStudyCard();
+    // Sort review cards by due date (earliest first)
+    reviewCards.sort((a, b) => a.due - b.due);
+    
+    // Limit review cards based on user settings
+    const maxReviews = Math.min(userSettings.reviewsPerDay, limit);
+    const limitedReviewCards = reviewCards.slice(0, maxReviews);
+    studyQueue.push(...limitedReviewCards);
+    
+    // Then, collect new cards if needed
+    if (includeNew) {
+        Object.entries(allFlashcards).forEach(([pageId, page]) => {
+            if (!page.cards) return;
+            
+            page.cards.forEach((card, index) => {
+                // Check if card is new (never reviewed)
+                if (!card.due && !card.suspended) {
+                    // Check tags if specified
+                    const matchesTags = tags.length === 0 || 
+                        (card.tags && tags.some(tag => card.tags.includes(tag)));
+                    
+                    if (matchesTags) {
+                        newCards.push({
+                            pageId,
+                            cardIndex: index,
+                            type: 'new'
+                        });
+                    }
+                }
+            });
+        });
+        
+        // Sort new cards according to settings
+        if (userSettings.cardOrderNew === 'random') {
+            // Shuffle new cards
+            for (let i = newCards.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newCards[i], newCards[j]] = [newCards[j], newCards[i]];
+            }
+        }
+        
+        // Limit new cards based on user settings and remaining limit
+        const remainingLimit = limit - limitedReviewCards.length;
+        const maxNewCards = Math.min(userSettings.newCardsPerDay, remainingLimit);
+        const limitedNewCards = newCards.slice(0, maxNewCards);
+        studyQueue.push(...limitedNewCards);
+    }
+    
+    // If no cards to study, show message
+    if (studyQueue.length === 0) {
+        showNotification('No cards to study based on your criteria.', true);
+        return;
+    }
+    
+    // Store queue in study session
+    studySession = {
+        active: true,
+        queue: studyQueue,
+        currentIndex: 0,
+        startTime: new Date()
+    };
+    
+    // Save session state
+    saveStudySession();
+    
+    // Begin study mode
+    showView('study');
+    showStudyCard();
+}
+
+// Save study session to localStorage
+function saveStudySession() {
+    try {
+        localStorage.setItem('studySession', JSON.stringify(studySession));
+    } catch (error) {
+        console.error('Error saving study session:', error);
+    }
 }
 
 function showStudyCard() {
@@ -3155,6 +3336,7 @@ function showStudyCard() {
     if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) {
         // Skip invalid card
         studySession.currentIndex++;
+        saveStudySession();
         showStudyCard();
         return;
     }
@@ -3280,6 +3462,7 @@ function answerStudyCard(rating) {
     if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) {
         // Skip invalid card
         studySession.currentIndex++;
+        saveStudySession();
         showStudyCard();
         return;
     }
@@ -3294,9 +3477,11 @@ function answerStudyCard(rating) {
     
     // Save changes
     saveFlashcardsToLocalStorage();
+    saveFlashcardsToServer();
     
     // Move to next card
     studySession.currentIndex++;
+    saveStudySession();
     showStudyCard();
 }
 
@@ -3352,21 +3537,12 @@ function showStudyCompletion() {
 }
 
 function exitStudyMode() {
-  // Mark study session as inactive
-  studySession.active = false;
-  saveStudySession();
-  
-  // Study session already handled in showView('home')
-  showView('home');
-}
-
-// Save study session to localStorage
-function saveStudySession() {
-  try {
-    localStorage.setItem('studySession', JSON.stringify(studySession));
-  } catch (error) {
-    console.error('Error saving study session:', error);
-  }
+    // Mark study session as inactive
+    studySession.active = false;
+    saveStudySession();
+    
+    // Study session already handled in showView('home')
+    showView('home');
 }
 
 // Save flashcards to localStorage (for persistence between syncs)
@@ -3408,32 +3584,60 @@ function saveFlashcardsToLocalStorage() {
     }
 }
 
+// Save flashcards to the server
 async function saveFlashcardsToServer() {
-  try {
-    // Only attempt if authenticated
-    const authStatus = await checkAuthStatus();
-    if (!authStatus.authenticated) return;
-    
-    showLoading('Saving progress...');
-    
-    const response = await fetch('/api/flashcards/update', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(allFlashcards)
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to save flashcards: ${response.status}`);
+    try {
+        // Only attempt if authenticated
+        const authStatus = await checkAuthStatus();
+        if (!authStatus.authenticated) return;
+        
+        // If offline, queue save for later
+        if (!navigator.onLine) {
+            pendingSaves.push({
+                timestamp: Date.now(),
+                data: JSON.parse(JSON.stringify(allFlashcards))
+            });
+            localStorage.setItem('pendingSaves', JSON.stringify(pendingSaves));
+            console.log('Offline - queued flashcard save for later');
+            return;
+        }
+        
+        // Process any pending saves first
+        if (pendingSaves.length > 0) {
+            console.log(`Attempting to process ${pendingSaves.length} pending saves`);
+            await processPendingSaves();
+        }
+        
+        showLoading('Saving progress...');
+        
+        const response = await fetch('/api/flashcards/update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(allFlashcards)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to save flashcards: ${response.status}`);
+        }
+        
+        hideLoading();
+        console.log('Saved study progress to server');
+    } catch (error) {
+        hideLoading();
+        console.error('Error saving flashcards to server:', error);
+        
+        // If failed due to network, queue for later
+        if (!navigator.onLine || error.name === 'NetworkError') {
+            pendingSaves.push({
+                timestamp: Date.now(),
+                data: JSON.parse(JSON.stringify(allFlashcards))
+            });
+            localStorage.setItem('pendingSaves', JSON.stringify(pendingSaves));
+            console.log('Network error - queued flashcard save for later');
+        }
     }
-    
-    hideLoading();
-    console.log('Saved study progress to server');
-  } catch (error) {
-    hideLoading();
-    console.error('Error saving flashcards to server:', error);
-  }
 }
 
 // Load flashcards from localStorage
@@ -3488,360 +3692,13 @@ function createNotificationElement() {
 // Ensure compatibility with touch devices
 document.addEventListener('touchstart', function() {}, {passive: true});
 
-// ====== OPTIONAL UTILITY FUNCTIONS & OPTIMIZATIONS ======
-// These can be appended to app.js if desired
+// Utility Functions
 
-// Debounce function to prevent excessive function calls (e.g., for search)
+// Debounce function to prevent excessive function calls
 function debounce(func, wait = 300) {
     let timeout;
     return function(...args) {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func.apply(this, args), wait);
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
     };
-  }
-  
-  // Apply debouncing to search input
-  function optimizeSearchInput() {
-    const searchInput = document.getElementById('search-input');
-    if (searchInput) {
-      const debouncedSearch = debounce(function() {
-        filterPages(this.value);
-      }, 300);
-      
-      // Replace the existing event listener
-      searchInput.removeEventListener('input', filterPages);
-      searchInput.addEventListener('input', debouncedSearch);
-    }
-  }
-  
-  // Optimize localStorage to handle larger datasets
-  function optimizeLocalStorage() {
-    // Function to compress data before saving
-    const compressData = (data) => {
-      try {
-        // Simple key shortening for common fields
-        const keyMap = {
-          'question': 'q',
-          'answer': 'a',
-          'interval': 'i',
-          'due': 'd',
-          'ease': 'e',
-          'reviewCount': 'rc',
-          'tags': 't',
-          'suspended': 's',
-          'pageTitle': 'pt',
-          'lastUpdated': 'lu',
-          'cards': 'c'
-        };
-        
-        // Convert to string
-        let jsonString = JSON.stringify(data);
-        
-        // Replace common keys with short versions
-        Object.entries(keyMap).forEach(([key, shortKey]) => {
-          const regex = new RegExp(`"${key}":`, 'g');
-          jsonString = jsonString.replace(regex, `"${shortKey}":`);
-        });
-        
-        return jsonString;
-      } catch (error) {
-        console.error('Error compressing data:', error);
-        return JSON.stringify(data);
-      }
-    };
-    
-    // Function to decompress data after loading
-    const decompressData = (jsonString) => {
-      try {
-        // Simple key restoration for common fields
-        const keyMap = {
-          'q': 'question',
-          'a': 'answer',
-          'i': 'interval',
-          'd': 'due',
-          'e': 'ease',
-          'rc': 'reviewCount',
-          't': 'tags',
-          's': 'suspended',
-          'pt': 'pageTitle',
-          'lu': 'lastUpdated',
-          'c': 'cards'
-        };
-        
-        // Replace short keys with original versions
-        Object.entries(keyMap).forEach(([shortKey, key]) => {
-          const regex = new RegExp(`"${shortKey}":`, 'g');
-          jsonString = jsonString.replace(regex, `"${key}":`);
-        });
-        
-        return JSON.parse(jsonString);
-      } catch (error) {
-        console.error('Error decompressing data:', error);
-        // Fallback to regular parsing
-        return JSON.parse(jsonString);
-      }
-    };
-    
-    // Override storage functions to use compression
-    const originalSaveFlashcards = saveFlashcardsToLocalStorage;
-    saveFlashcardsToLocalStorage = function() {
-      try {
-        localStorage.setItem('allFlashcards', compressData(allFlashcards));
-      } catch (error) {
-        console.error('Error saving compressed flashcards:', error);
-        originalSaveFlashcards(); // Fall back to original method
-      }
-    };
-    
-    const originalLoadFlashcards = loadFlashcardsFromLocalStorage;
-    loadFlashcardsFromLocalStorage = function() {
-      try {
-        const savedFlashcards = localStorage.getItem('allFlashcards');
-        if (savedFlashcards) {
-          return decompressData(savedFlashcards);
-        }
-      } catch (error) {
-        console.error('Error loading compressed flashcards:', error);
-        return originalLoadFlashcards(); // Fall back to original method
-      }
-      return null;
-    };
-  }
-  
-  // Export flashcards to a downloadable file
-  function addExportImportFeatures() {
-    // Create export function
-    window.exportFlashcards = function() {
-      const data = JSON.stringify(allFlashcards, null, 2);
-      const blob = new Blob([data], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `onenote-flashcards-export-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 0);
-    };
-    
-    // Create import function
-    window.importFlashcards = function(fileInput) {
-      const file = fileInput.files[0];
-      if (!file) return;
-      
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          const importedData = JSON.parse(e.target.result);
-          
-          // Validate format
-          if (!importedData || typeof importedData !== 'object') {
-            throw new Error('Invalid file format');
-          }
-          
-          // Prompt user for merge or replace
-          const shouldMerge = confirm(
-            'Do you want to merge the imported cards with your existing collection? ' +
-            'Click OK to merge, or Cancel to replace all existing cards.'
-          );
-          
-          if (shouldMerge) {
-            // Merge with existing cards
-            Object.entries(importedData).forEach(([pageId, pageData]) => {
-              if (allFlashcards[pageId]) {
-                // Update existing page title
-                allFlashcards[pageId].pageTitle = pageData.pageTitle;
-                
-                // Add new cards or update existing
-                if (pageData.cards && Array.isArray(pageData.cards)) {
-                  const existingQuestions = new Set(
-                    allFlashcards[pageId].cards.map(card => card.question)
-                  );
-                  
-                  pageData.cards.forEach(card => {
-                    if (!existingQuestions.has(card.question)) {
-                      allFlashcards[pageId].cards.push(card);
-                    }
-                  });
-                }
-              } else {
-                // Add new page
-                allFlashcards[pageId] = pageData;
-              }
-            });
-          } else {
-            // Replace all cards
-            allFlashcards = importedData;
-          }
-          
-          // Save to localStorage
-          saveFlashcardsToLocalStorage();
-          
-          // Update UI
-          updateTagFilterList();
-          renderPagesList();
-          updateDueCounts();
-          updateStatsDisplay();
-          
-          showNotification('Flashcards imported successfully!');
-        } catch (error) {
-          console.error('Error importing flashcards:', error);
-          showNotification('Failed to import flashcards. Invalid file format.', true);
-        }
-      };
-      
-      reader.readAsText(file);
-    };
-    
-    // Add UI elements for export/import
-    const addExportImportButtons = () => {
-      // Check if already added
-      if (document.getElementById('export-import-container')) return;
-      
-      const container = document.createElement('div');
-      container.id = 'export-import-container';
-      container.className = 'mt-3 d-flex justify-content-between';
-      container.innerHTML = `
-        <button id="export-flashcards" class="btn btn-sm btn-outline-primary">
-          <i class="bi bi-download me-1"></i>Export
-        </button>
-        <label class="btn btn-sm btn-outline-primary mb-0">
-          <i class="bi bi-upload me-1"></i>Import
-          <input type="file" id="import-flashcards" accept=".json" style="display: none;">
-        </label>
-      `;
-      
-      // Find a suitable parent element
-      const pageListParent = document.querySelector('.pages-container .card-body');
-      if (pageListParent) {
-        pageListParent.appendChild(container);
-        
-        // Add event listeners
-        document.getElementById('export-flashcards').addEventListener('click', window.exportFlashcards);
-        document.getElementById('import-flashcards').addEventListener('change', function() {
-          window.importFlashcards(this);
-        });
-      }
-    };
-    
-    // Call this after DOM is loaded
-    document.addEventListener('DOMContentLoaded', addExportImportButtons);
-  }
-  
-  // Add offline synchronization indicators
-  function addOfflineSyncStatus() {
-    // Track online/offline status
-    window.addEventListener('online', updateOnlineStatus);
-    window.addEventListener('offline', updateOnlineStatus);
-    
-    function updateOnlineStatus() {
-      const isOnline = navigator.onLine;
-      const syncButtons = document.querySelectorAll('#sync-button, #full-sync-button');
-      
-      syncButtons.forEach(button => {
-        if (!isOnline) {
-          button.classList.add('offline');
-          button.setAttribute('data-original-text', button.innerHTML);
-          button.innerHTML = '<i class="bi bi-wifi-off me-1"></i>Offline';
-          button.disabled = true;
-        } else {
-          if (button.classList.contains('offline')) {
-            button.classList.remove('offline');
-            button.innerHTML = button.getAttribute('data-original-text');
-            button.disabled = false;
-          }
-        }
-      });
-      
-      // Show notification on status change
-      if (!isOnline) {
-        showNotification('You are offline. Sync features are disabled.', true);
-      } else {
-        showNotification('You are back online. Sync features are available.');
-      }
-    }
-    
-    // Initial check
-    updateOnlineStatus();
-  }
-  
-  // Add performance monitoring
-  function setupPerformanceMonitoring() {
-    const perfMetrics = {
-      pageLoads: 0,
-      cardDisplays: 0,
-      syncOperations: 0,
-      averageCardLoadTime: 0,
-      totalCardLoadTime: 0
-    };
-    
-    // Override displayCurrentCard to measure performance
-    const originalDisplayCard = displayCurrentCard;
-    displayCurrentCard = function() {
-      const startTime = performance.now();
-      originalDisplayCard();
-      const endTime = performance.now();
-      
-      const loadTime = endTime - startTime;
-      perfMetrics.totalCardLoadTime += loadTime;
-      perfMetrics.cardDisplays++;
-      perfMetrics.averageCardLoadTime = perfMetrics.totalCardLoadTime / perfMetrics.cardDisplays;
-      
-      // Log if unusually slow (over 100ms)
-      if (loadTime > 100) {
-        console.warn(`Slow card load: ${loadTime.toFixed(2)}ms`);
-      }
-    };
-    
-    // Track sync operations
-    const originalSyncSection = syncSection;
-    syncSection = function(notebookId, sectionId) {
-      perfMetrics.syncOperations++;
-      return originalSyncSection(notebookId, sectionId);
-    };
-    
-    // Add method to get metrics
-    window.getPerformanceMetrics = function() {
-      return {
-        ...perfMetrics,
-        localStorageUsage: calculateLocalStorageUsage()
-      };
-    };
-    
-    function calculateLocalStorageUsage() {
-      let total = 0;
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        const value = localStorage.getItem(key);
-        total += (key.length + value.length) * 2; // UTF-16 characters = 2 bytes each
-      }
-      
-      // Return size in KB
-      return (total / 1024).toFixed(2);
-    }
-    
-    // Track page loads
-    perfMetrics.pageLoads++;
-  }
-  
-  // Initialize utilities
-  function initUtilities() {
-    // Uncomment the utilities you want to use
-    // optimizeSearchInput();
-    // optimizeLocalStorage();
-    // addExportImportFeatures();
-    // addOfflineSyncStatus();
-    // setupPerformanceMonitoring();
-    
-    console.log('Utilities initialized');
-  }
-  
-  // Call after main app initialization
-  // initUtilities();
-  
-  // To enable utilities, remove the comment from the line above
-  // or call initUtilities() explicitly after app initialization
+}
