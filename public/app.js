@@ -895,6 +895,18 @@ function setupEventListeners() {
     // Flashcard navigation
     setupFlashcardControls();
     
+    // Add Card button
+    const addCardButton = document.getElementById('add-card-button');
+    if (addCardButton) {
+        addCardButton.addEventListener('click', openAddCardModal);
+    }
+    
+    // Save new card button
+    const saveNewCardButton = document.getElementById('save-new-card');
+    if (saveNewCardButton) {
+        saveNewCardButton.addEventListener('click', saveNewCard);
+    }
+
     // Keyboard shortcuts
     document.addEventListener('keydown', handleKeyPress);
     
@@ -3164,6 +3176,93 @@ function closeCardEditor() {
     showView('cards');
 }
 
+// Function to open the Add Card modal
+function openAddCardModal() {
+    // Clear previous input
+    document.getElementById('new-question').value = '';
+    document.getElementById('new-answer').value = '';
+    document.getElementById('new-tags').value = '';
+    
+    // Show the modal
+    const addCardModal = new bootstrap.Modal(document.getElementById('add-card-modal'));
+    addCardModal.show();
+}
+
+// Function to save a new card
+function saveNewCard() {
+    // Get input values
+    const questionField = document.getElementById('new-question');
+    const answerField = document.getElementById('new-answer');
+    const tagsField = document.getElementById('new-tags');
+    
+    if (!questionField || !answerField) {
+        return;
+    }
+    
+    const newQuestion = questionField.value.trim();
+    const newAnswer = answerField.value.trim();
+    const newTags = tagsField.value ? tagsField.value.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
+    
+    // Validate input
+    if (!newQuestion || !newAnswer) {
+        showNotification('Question and answer are required', true);
+        return;
+    }
+    
+    // Make sure we have a valid currentPageId
+    if (!currentPageId || !allFlashcards[currentPageId]) {
+        showNotification('No active deck selected', true);
+        return;
+    }
+    
+    // Create new card object
+    const newCard = {
+        question: newQuestion,
+        answer: newAnswer,
+        tags: newTags,
+        interval: 0,
+        ease: EASE_FACTOR_DEFAULT,
+        due: null,
+        reviewCount: 0,
+        suspended: false,
+        created: new Date().toISOString()
+    };
+    
+    // Add card to the deck
+    if (!allFlashcards[currentPageId].cards) {
+        allFlashcards[currentPageId].cards = [];
+    }
+    
+    allFlashcards[currentPageId].cards.push(newCard);
+    
+    // Update last modified timestamp
+    allFlashcards[currentPageId].lastUpdated = new Date().toISOString();
+    
+    // Save changes
+    saveFlashcardsToLocalStorage();
+    saveFlashcardsToServer();
+    
+    // Update UI
+    renderPagesList();
+    updateTagFilterList();
+    
+    // Close the modal
+    const addCardModal = bootstrap.Modal.getInstance(document.getElementById('add-card-modal'));
+    if (addCardModal) {
+        addCardModal.hide();
+    }
+    
+    // Show notification
+    showNotification('New card added successfully');
+    
+    // If we're in the cards view, update the card counter and show the last card
+    if (currentView === 'cards') {
+        // Set current card index to the new card
+        currentCardIndex = allFlashcards[currentPageId].cards.length - 1;
+        displayCurrentCard();
+    }
+}
+
 function saveCardEdits() {
     // Get edited values
     const questionField = document.getElementById('edit-question');
@@ -3351,6 +3450,13 @@ function showStudyCard() {
     const showAnswerBtn = document.getElementById('study-show-answer');
     const answerButtons = document.getElementById('study-answer-buttons');
     
+    // IMPORTANT: Ensure answer buttons are hidden before anything else
+    if (answerButtons) {
+        answerButtons.style.display = 'none';
+        // Force style with important to override any CSS
+        answerButtons.setAttribute('style', 'display: none !important');
+    }
+    
     // Update page title
     if (pageTitle) {
         pageTitle.textContent = allFlashcards[pageId].pageTitle;
@@ -3374,9 +3480,8 @@ function showStudyCard() {
         answerEl.classList.add('hidden');
     }
     
-    // Show/hide buttons
+    // Show answer button
     if (showAnswerBtn) showAnswerBtn.style.display = 'block';
-    if (answerButtons) answerButtons.style.display = 'none';
     
     // Update study status
     updateStudyStatusDisplay();
@@ -3540,6 +3645,10 @@ function exitStudyMode() {
     // Mark study session as inactive
     studySession.active = false;
     saveStudySession();
+    
+    // Update deck view with latest progress
+    renderPagesList();
+    updateDueCounts();
     
     // Study session already handled in showView('home')
     showView('home');

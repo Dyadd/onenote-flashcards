@@ -328,6 +328,9 @@
                                 <h5 id="current-page-title" class="d-inline">OneNote Flashcards</h5>
                             </div>
                             <div>
+                                <button id="add-card-button" class="btn btn-sm btn-success me-1">
+                                    <i class="bi bi-plus-circle me-1"></i>Add Card
+                                </button>
                                 <button id="share-link" class="btn btn-sm btn-outline-primary me-1">
                                     <i class="bi bi-share me-1"></i>Share
                                 </button>
@@ -711,6 +714,36 @@
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Card Modal -->
+        <div class="modal fade" id="add-card-modal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Add New Flashcard</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="new-question" class="form-label">Question:</label>
+                            <textarea id="new-question" class="form-control" rows="3" placeholder="Enter your question here"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="new-answer" class="form-label">Answer:</label>
+                            <textarea id="new-answer" class="form-control" rows="5" placeholder="Enter your answer here"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="new-tags" class="form-label">Tags (comma separated):</label>
+                            <input type="text" id="new-tags" class="form-control" placeholder="tag1, tag2, ...">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="save-new-card">Save Card</button>
                     </div>
                 </div>
             </div>
