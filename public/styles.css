@@ -9,11 +9,6 @@
     pointer-events: none !important;
 }
 
-.highlight-deck {
-    background-color: rgba(13, 110, 253, 0.1) !important;
-    transition: background-color 0.5s ease;
-}
-
 /* Horizontal Navbar */
 .app-header {
   background-color: #5C73F2;

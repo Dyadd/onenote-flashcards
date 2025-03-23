@@ -25,7 +25,6 @@ let studySession = {
 };
 let currentView = 'home'; // Track current view for navigation
 let pendingSaves = []; // For offline handling
-let currentCardState = 'question'; // Track if we're showing question or answer in study mode
 
 // Card scheduling constants (Anki-like algorithms)
 const EASE_FACTOR_DEFAULT = 2.5;
@@ -353,15 +352,6 @@ function loadStudyStats() {
             saveStudyStats();
         }
         
-        // Ensure all required properties exist
-        if (!userStudyStats.reviewHistory) userStudyStats.reviewHistory = [];
-        if (!userStudyStats.deckStats) userStudyStats.deckStats = {};
-        if (userStudyStats.totalReviews === undefined) userStudyStats.totalReviews = 0;
-        if (userStudyStats.correctReviews === undefined) userStudyStats.correctReviews = 0;
-        if (userStudyStats.cardsStudied === undefined) userStudyStats.cardsStudied = 0;
-        if (userStudyStats.studyTimeMinutes === undefined) userStudyStats.studyTimeMinutes = 0;
-        if (userStudyStats.streakDays === undefined) userStudyStats.streakDays = 0;
-        
         // Update streak
         updateStudyStreak();
     } catch (error) {
@@ -422,12 +412,6 @@ function updateStudyStreak() {
 
 // Record a card review in study statistics
 function recordCardReview(cardIndex, pageId, result) {
-    // Ensure pageId and cardIndex are valid
-    if (!pageId || cardIndex === undefined || !allFlashcards[pageId]) {
-        console.error('Invalid pageId or cardIndex in recordCardReview');
-        return;
-    }
-    
     // Update global stats
     userStudyStats.totalReviews++;
     
@@ -435,11 +419,8 @@ function recordCardReview(cardIndex, pageId, result) {
         userStudyStats.correctReviews++;
     }
     
-    const card = allFlashcards[pageId]?.cards?.[cardIndex];
-    if (!card) {
-        console.error(`Card not found: pageId=${pageId}, cardIndex=${cardIndex}`);
-        return;
-    }
+    const card = allFlashcards[pageId]?.cards[cardIndex];
+    if (!card) return;
     
     // If first time seeing this card, increment cardsStudied
     if (!card.reviewCount || card.reviewCount === 0) {
@@ -461,11 +442,6 @@ function recordCardReview(cardIndex, pageId, result) {
     // Ensure history doesn't grow too large (keep last 1000 reviews)
     if (userStudyStats.reviewHistory.length > 1000) {
         userStudyStats.reviewHistory = userStudyStats.reviewHistory.slice(-1000);
-    }
-    
-    // Ensure deck stats object exists
-    if (!userStudyStats.deckStats) {
-        userStudyStats.deckStats = {};
     }
     
     // Update deck/page stats
@@ -505,18 +481,6 @@ function recordCardReview(cardIndex, pageId, result) {
 function updateStatsDisplay() {
     const statsContainer = document.getElementById('stats-container');
     if (!statsContainer) return;
-    
-    // Ensure userStudyStats is properly initialized
-    if (!userStudyStats) {
-        console.error('userStudyStats is not defined');
-        return;
-    }
-    
-    // Initialize key properties if missing
-    if (!userStudyStats.totalReviews) userStudyStats.totalReviews = 0;
-    if (!userStudyStats.correctReviews) userStudyStats.correctReviews = 0;
-    if (!userStudyStats.cardsStudied) userStudyStats.cardsStudied = 0;
-    if (!userStudyStats.streakDays) userStudyStats.streakDays = 0;
     
     // Calculate retention rate
     const retentionRate = userStudyStats.totalReviews > 0 
@@ -570,40 +534,20 @@ function updateDetailedStats() {
     const detailedStatsContainer = document.getElementById('detailed-stats-container');
     if (!detailedStatsContainer) return;
     
-    // Ensure userStudyStats is properly initialized
-    if (!userStudyStats) {
-        console.error('userStudyStats is not defined');
-        return;
-    }
-    
-    // Initialize key properties if missing
-    if (!userStudyStats.reviewHistory) userStudyStats.reviewHistory = [];
-    if (!userStudyStats.deckStats) userStudyStats.deckStats = {};
-    if (userStudyStats.totalReviews === undefined) userStudyStats.totalReviews = 0;
-    if (userStudyStats.correctReviews === undefined) userStudyStats.correctReviews = 0;
-    if (userStudyStats.cardsStudied === undefined) userStudyStats.cardsStudied = 0;
-    if (userStudyStats.studyTimeMinutes === undefined) userStudyStats.studyTimeMinutes = 0;
-    if (userStudyStats.streakDays === undefined) userStudyStats.streakDays = 0;
-    
     // Calculate retention rate
     const retentionRate = userStudyStats.totalReviews > 0 
         ? (userStudyStats.correctReviews / userStudyStats.totalReviews * 100).toFixed(1) 
         : 0;
     
-    // Safely calculate reviews per day
-    const reviewDays = userStudyStats.reviewHistory.length > 0 
-        ? new Set(userStudyStats.reviewHistory.map(r => r.date.split('T')[0])).size 
-        : 0;
-    
+    // Calculate reviews per day
+    const reviewDays = new Set(userStudyStats.reviewHistory.map(r => r.date.split('T')[0])).size;
     const averageReviews = reviewDays > 0 
         ? (userStudyStats.totalReviews / reviewDays).toFixed(1) 
         : 0;
     
-    // Format review history for chart - safely
+    // Format review history for chart
     const reviewByDay = {};
     userStudyStats.reviewHistory.forEach(review => {
-        if (!review || !review.date) return;
-        
         const day = review.date.split('T')[0];
         if (!reviewByDay[day]) {
             reviewByDay[day] = { total: 0, correct: 0 };
@@ -614,30 +558,20 @@ function updateDetailedStats() {
         }
     });
     
-    // Get deck-specific stats safely
-    const deckStats = [];
-    
-    // Only process if we have both deckStats and allFlashcards
-    if (userStudyStats.deckStats && allFlashcards) {
-        Object.entries(userStudyStats.deckStats).forEach(([pageId, stats]) => {
-            if (!stats) return;
-            
-            const deckName = (allFlashcards[pageId] && allFlashcards[pageId].pageTitle) 
-                ? allFlashcards[pageId].pageTitle 
-                : 'Unknown Deck';
-            
-            const deckRetention = stats.totalReviews > 0 
-                ? (stats.correctReviews / stats.totalReviews * 100).toFixed(1) 
-                : 0;
-            
-            deckStats.push({
-                deckName,
-                cardsStudied: stats.cardsStudied || 0,
-                totalReviews: stats.totalReviews || 0,
-                retention: deckRetention
-            });
-        });
-    }
+    // Get deck-specific stats
+    const deckStats = Object.entries(userStudyStats.deckStats).map(([pageId, stats]) => {
+        const deckName = allFlashcards[pageId]?.pageTitle || 'Unknown Deck';
+        const deckRetention = stats.totalReviews > 0 
+            ? (stats.correctReviews / stats.totalReviews * 100).toFixed(1) 
+            : 0;
+        
+        return {
+            deckName,
+            cardsStudied: stats.cardsStudied,
+            totalReviews: stats.totalReviews,
+            retention: deckRetention
+        };
+    });
     
     // Build HTML for detailed stats
     let deckStatsHtml = '';
@@ -768,10 +702,6 @@ function getDueCounts() {
     let newCount = 0;
     let totalCount = 0;
     
-    if (!allFlashcards) {
-        return { dueCount: 0, newCount: 0, totalCount: 0 };
-    }
-    
     Object.values(allFlashcards).forEach(page => {
         if (!page.cards) return;
         
@@ -842,8 +772,6 @@ function updateHeatmap() {
     
     // Count reviews per day
     reviewHistory.forEach(review => {
-        if (!review || !review.date) return;
-        
         const dateStr = review.date.split('T')[0];
         if (reviewCounts[dateStr] !== undefined) {
             reviewCounts[dateStr]++;
@@ -3396,7 +3324,7 @@ function saveCardEdits() {
     showNotification('Card updated successfully');
 }
 
-// Modified Study session functions with improved answer button handling
+// Study session functions
 function startStudySession(includeDue, includeNew, limit, tags) {
     // Create a queue of cards to study
     const studyQueue = [];
@@ -3496,11 +3424,6 @@ function startStudySession(includeDue, includeNew, limit, tags) {
     
     // Begin study mode
     showView('study');
-    
-    // Reset card state
-    currentCardState = 'question';
-    
-    // Display first card
     showStudyCard();
 }
 
@@ -3514,17 +3437,17 @@ function saveStudySession() {
 }
 
 function showStudyCard() {
-    // Reset state at the beginning of showing a new card
-    currentCardState = 'question';
-    
-    // Get current item from queue
+    // Check if we've reached the end of the queue
     if (studySession.currentIndex >= studySession.queue.length) {
         showStudyCompletion();
         return;
     }
     
-    const { pageId, cardIndex, type } = studySession.queue[studySession.currentIndex];
-    // Get card
+    // Get current card info
+    const currentItem = studySession.queue[studySession.currentIndex];
+    const { pageId, cardIndex, type } = currentItem;
+    
+    // Get card from flashcards
     if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) {
         // Skip invalid card
         studySession.currentIndex++;
@@ -3535,31 +3458,21 @@ function showStudyCard() {
     
     const card = allFlashcards[pageId].cards[cardIndex];
     
+    // CRITICAL: Forcefully hide answer buttons with more aggressive approach
+    const answerButtons = document.getElementById('study-answer-buttons');
+    if (answerButtons) {
+        // Force inline style with !important
+        answerButtons.setAttribute('style', 'display: none !important');
+        // Also add a class for CSS-based hiding
+        answerButtons.classList.add('force-hidden');
+    }
+    
     // Get UI elements
     const questionEl = document.getElementById('study-question');
     const answerEl = document.getElementById('study-answer');
     const pageTitle = document.getElementById('study-page-title');
     const cardType = document.getElementById('study-card-type');
     const showAnswerBtn = document.getElementById('study-show-answer');
-    const answerButtons = document.getElementById('study-answer-buttons');
-    
-    // CRITICAL: Always hide answer and answer buttons when showing a new card
-    if (answerEl) {
-        answerEl.classList.add('hidden');
-    }
-    
-    if (answerButtons) {
-        // Use multiple methods to ensure it's hidden
-        answerButtons.classList.add('force-hidden');
-        answerButtons.style.display = 'none';
-        // Remove any inline display styles that might override
-        answerButtons.setAttribute('style', 'display: none !important');
-    }
-    
-    // Ensure show answer button is visible
-    if (showAnswerBtn) {
-        showAnswerBtn.style.display = 'block';
-    }
     
     // Update page title
     if (pageTitle) {
@@ -3579,87 +3492,24 @@ function showStudyCard() {
     
     // Set question and answer
     if (questionEl) questionEl.innerHTML = card.question;
-    if (answerEl) answerEl.innerHTML = card.answer;
+    if (answerEl) {
+        answerEl.innerHTML = card.answer;
+        answerEl.classList.add('hidden');
+    }
+    
+    // Show answer button
+    if (showAnswerBtn) showAnswerBtn.style.display = 'block';
     
     // Update study status
     updateStudyStatusDisplay();
     
     // Update spaced repetition button labels
     updateStudyAnswerButtonLabels(card);
-}
-
-function showStudyAnswer() {
-    currentCardState = 'answer';
     
-    const answerEl = document.getElementById('study-answer');
-    const showAnswerBtn = document.getElementById('study-show-answer');
-    const answerButtons = document.getElementById('study-answer-buttons');
-    
-    if (answerEl) {
-        answerEl.classList.remove('hidden');
-    }
-    
-    if (showAnswerBtn) {
-        showAnswerBtn.style.display = 'none';
-    }
-    
-    // Show answer buttons
-    if (answerButtons) {
-        // Remove all hiding methods
-        answerButtons.classList.remove('force-hidden');
-        answerButtons.removeAttribute('style');
-        answerButtons.style.display = 'flex';
-    }
-}
-
-function answerStudyCard(rating) {
-    // Reset card state
-    currentCardState = 'question';
-    
-    // Get current item from queue
-    if (studySession.currentIndex >= studySession.queue.length) return;
-    
-    const { pageId, cardIndex } = studySession.queue[studySession.currentIndex];
-    
-    // Get card
-    if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) {
-        // Skip invalid card
-        studySession.currentIndex++;
-        saveStudySession();
-        showStudyCard();
-        return;
-    }
-    
-    const card = allFlashcards[pageId].cards[cardIndex];
-    
-    // Apply spaced repetition algorithm
-    applySpacedRepetition(card, rating);
-    
-    // Record review
-    recordCardReview(cardIndex, pageId, rating);
-    
-    // Save changes
-    saveFlashcardsToLocalStorage();
-    saveFlashcardsToServer();
-    
-    // Hide answer and buttons before next card
-    const answerEl = document.getElementById('study-answer');
-    const answerButtons = document.getElementById('study-answer-buttons');
-    
-    if (answerEl) {
-        answerEl.classList.add('hidden');
-    }
-    
-    if (answerButtons) {
-        answerButtons.classList.add('force-hidden');
-        answerButtons.style.display = 'none';
-        answerButtons.setAttribute('style', 'display: none !important');
-    }
-    
-    // Move to next card
-    studySession.currentIndex++;
-    saveStudySession();
-    showStudyCard();
+    // Add CSS to force-hide buttons just to be extra sure
+    const style = document.createElement('style');
+    style.textContent = '.force-hidden { display: none !important; }';
+    document.head.appendChild(style);
 }
 
 function updateStudyStatusDisplay() {
@@ -3719,6 +3569,79 @@ function updateStudyAnswerButtonLabels(card) {
     if (easyLabel) easyLabel.textContent = easyInterval;
 }
 
+function showStudyAnswer() {
+    const answerEl = document.getElementById('study-answer');
+    const showAnswerBtn = document.getElementById('study-show-answer');
+    const answerButtons = document.getElementById('study-answer-buttons');
+    
+    if (answerEl) {
+        answerEl.classList.remove('hidden');
+    }
+    
+    if (showAnswerBtn) {
+        showAnswerBtn.style.display = 'none';
+    }
+    
+    // CRITICAL: Show answer buttons properly by removing forced hiding
+    if (answerButtons) {
+        answerButtons.removeAttribute('style');
+        answerButtons.classList.remove('force-hidden');
+        answerButtons.style.display = 'flex';
+    }
+}
+
+function answerStudyCard(rating) {
+    // Get current item from queue
+    if (studySession.currentIndex >= studySession.queue.length) return;
+    
+    const { pageId, cardIndex } = studySession.queue[studySession.currentIndex];
+    
+    // Get card
+    if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) {
+        // Skip invalid card
+        studySession.currentIndex++;
+        saveStudySession();
+        showStudyCard();
+        return;
+    }
+    
+    const card = allFlashcards[pageId].cards[cardIndex];
+    
+    // Apply spaced repetition algorithm
+    applySpacedRepetition(card, rating);
+    
+    // Record review
+    recordCardReview(cardIndex, pageId, rating);
+    
+    // Save changes
+    saveFlashcardsToLocalStorage();
+    saveFlashcardsToServer();
+    
+    // CRITICAL: Hide answer buttons before showing next card
+    const answerButtons = document.getElementById('study-answer-buttons');
+    if (answerButtons) {
+        answerButtons.setAttribute('style', 'display: none !important');
+        answerButtons.classList.add('force-hidden');
+    }
+    
+    // Hide answer 
+    const answerEl = document.getElementById('study-answer');
+    if (answerEl) {
+        answerEl.classList.add('hidden');
+    }
+    
+    // Show answer button for next card
+    const showAnswerBtn = document.getElementById('study-show-answer');
+    if (showAnswerBtn) {
+        showAnswerBtn.style.display = 'block';
+    }
+    
+    // Move to next card
+    studySession.currentIndex++;
+    saveStudySession();
+    showStudyCard();
+}
+
 function showStudyCompletion() {
     // Hide study card container
     const studyCardEl = document.getElementById('study-card');
@@ -3775,44 +3698,25 @@ function exitStudyMode() {
     studySession.active = false;
     saveStudySession();
     
-    // First save all flashcard data to ensure it's persisted
-    saveFlashcardsToLocalStorage();
-    
-    // Clear cached counts for all decks
+    // Clear any cached counts and force update
     Object.keys(allFlashcards).forEach(pageId => {
         if (allFlashcards[pageId]._cachedCounts) {
             delete allFlashcards[pageId]._cachedCounts;
         }
     });
     
-    // Force a complete redraw of the UI
-    // 1. Switch view first
-    showView('home');
+    // Update deck view with latest progress
+    renderPagesList();
+    updateDueCounts();
     
-    // 2. Then update all UI elements with a small delay to ensure DOM is ready
+    // Force UI refresh with a slight delay
     setTimeout(() => {
-        // Update deck list with fresh data
         renderPagesList();
-        
-        // Update statistics displays
-        updateStatsDisplay();
-        updateHeatmap();
         updateDueCounts();
-        
-        // Find and highlight the deck we were just studying
-        if (currentPageId) {
-            const deckElement = document.querySelector(`#pages-list li[data-page-id="${currentPageId}"]`);
-            if (deckElement) {
-                deckElement.classList.add('highlight-deck');
-                deckElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                
-                // Remove highlight after a moment
-                setTimeout(() => {
-                    deckElement.classList.remove('highlight-deck');
-                }, 2000);
-            }
-        }
-    }, 100);
+    }, 200);
+    
+    // Switch to home view
+    showView('home');
 }
 
 // Save flashcards to localStorage (for persistence between syncs)
