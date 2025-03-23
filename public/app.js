@@ -42,37 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
     init();
 });
 
-function debugDeckCounts() {
-    console.log("========== DECK COUNT DIAGNOSTICS ==========");
-    Object.keys(allFlashcards).forEach(pageId => {
-        const page = allFlashcards[pageId];
-        if (!page.cards) return;
-        
-        let newCount = 0;
-        let dueCount = 0;
-        let reviewedCount = 0;
-        
-        const today = new Date();
-        
-        page.cards.forEach(card => {
-            if (card.suspended) return;
-            
-            if (!card.due) {
-                newCount++;
-            } else if (new Date(card.due) <= today) {
-                dueCount++;
-            } else if (card.reviewCount > 0) {
-                reviewedCount++;
-            }
-        });
-        
-        console.log(`Deck: ${page.pageTitle}`);
-        console.log(`- New: ${newCount}, Due: ${dueCount}, Reviewed: ${reviewedCount}`);
-        console.log(`- Total Cards: ${page.cards.length}`);
-    });
-    console.log("===========================================");
-}
-
 // View Management Functions
 function showView(viewName) {
     console.log(`Switching to view: ${viewName}`);
@@ -3467,13 +3436,9 @@ function saveStudySession() {
     }
 }
 
-// Replace showStudyCard with this diagnostic version
 function showStudyCard() {
-    console.log("showStudyCard called");
-    
     // Check if we've reached the end of the queue
     if (studySession.currentIndex >= studySession.queue.length) {
-        console.log("End of queue reached, showing completion");
         showStudyCompletion();
         return;
     }
@@ -3482,11 +3447,9 @@ function showStudyCard() {
     const currentItem = studySession.queue[studySession.currentIndex];
     const { pageId, cardIndex, type } = currentItem;
     
-    console.log(`Showing card ${cardIndex} from page ${pageId}, type: ${type}`);
-    
     // Get card from flashcards
     if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) {
-        console.log("Invalid card, skipping to next");
+        // Skip invalid card
         studySession.currentIndex++;
         saveStudySession();
         showStudyCard();
@@ -3495,25 +3458,13 @@ function showStudyCard() {
     
     const card = allFlashcards[pageId].cards[cardIndex];
     
-    // NUCLEAR OPTION: Hide all rating buttons from the DOM completely
-    const answerButtonsDiv = document.getElementById('study-answer-buttons');
-    
-    if (answerButtonsDiv) {
-        console.log("Found answer buttons, hiding them");
-        // First, try standard approach
-        answerButtonsDiv.style.display = 'none';
-        // Then try force-hidden class
-        answerButtonsDiv.classList.add('force-hidden');
-        
-        // Nuclear approach: actually remove the buttons from DOM temporarily
-        if (answerButtonsDiv.parentNode) {
-            console.log("Temporarily removing buttons from DOM");
-            // Store reference for later
-            window._savedButtonsDiv = answerButtonsDiv;
-            answerButtonsDiv.parentNode.removeChild(answerButtonsDiv);
-        }
-    } else {
-        console.log("Could not find answer buttons div!");
+    // CRITICAL: Forcefully hide answer buttons with more aggressive approach
+    const answerButtons = document.getElementById('study-answer-buttons');
+    if (answerButtons) {
+        // Force inline style with !important
+        answerButtons.setAttribute('style', 'display: none !important');
+        // Also add a class for CSS-based hiding
+        answerButtons.classList.add('force-hidden');
     }
     
     // Get UI elements
@@ -3547,10 +3498,7 @@ function showStudyCard() {
     }
     
     // Show answer button
-    if (showAnswerBtn) {
-        console.log("Showing answer button");
-        showAnswerBtn.style.display = 'block';
-    }
+    if (showAnswerBtn) showAnswerBtn.style.display = 'block';
     
     // Update study status
     updateStudyStatusDisplay();
@@ -3558,7 +3506,10 @@ function showStudyCard() {
     // Update spaced repetition button labels
     updateStudyAnswerButtonLabels(card);
     
-    console.log("showStudyCard completed");
+    // Add CSS to force-hide buttons just to be extra sure
+    const style = document.createElement('style');
+    style.textContent = '.force-hidden { display: none !important; }';
+    document.head.appendChild(style);
 }
 
 function updateStudyStatusDisplay() {
@@ -3618,75 +3569,36 @@ function updateStudyAnswerButtonLabels(card) {
     if (easyLabel) easyLabel.textContent = easyInterval;
 }
 
-// Replace showStudyAnswer with this diagnostic version
 function showStudyAnswer() {
-    console.log("showStudyAnswer called");
-    
     const answerEl = document.getElementById('study-answer');
     const showAnswerBtn = document.getElementById('study-show-answer');
+    const answerButtons = document.getElementById('study-answer-buttons');
     
     if (answerEl) {
-        console.log("Revealing answer");
         answerEl.classList.remove('hidden');
     }
     
     if (showAnswerBtn) {
-        console.log("Hiding show answer button");
         showAnswerBtn.style.display = 'none';
     }
     
-    // NUCLEAR OPTION: Re-add the buttons to DOM
-    if (window._savedButtonsDiv) {
-        console.log("Re-adding answer buttons to DOM");
-        // Find the right place to add them back - assuming it's the study card
-        const studyCard = document.getElementById('study-card');
-        if (studyCard) {
-            // Find the footer area
-            const footer = studyCard.querySelector('.study-footer');
-            if (footer) {
-                console.log("Found study footer, adding buttons back");
-                footer.appendChild(window._savedButtonsDiv);
-                // Make buttons visible
-                window._savedButtonsDiv.classList.remove('force-hidden');
-                window._savedButtonsDiv.style.display = 'flex';
-            } else {
-                console.log("Could not find study footer!");
-            }
-        } else {
-            console.log("Could not find study card!");
-        }
-    } else {
-        console.log("No saved buttons div found!");
-        
-        // Try to find the buttons div
-        const answerButtons = document.getElementById('study-answer-buttons');
-        if (answerButtons) {
-            console.log("Found answer buttons, making them visible");
-            answerButtons.classList.remove('force-hidden');
-            answerButtons.style.display = 'flex';
-        }
+    // CRITICAL: Show answer buttons properly by removing forced hiding
+    if (answerButtons) {
+        answerButtons.removeAttribute('style');
+        answerButtons.classList.remove('force-hidden');
+        answerButtons.style.display = 'flex';
     }
-    
-    console.log("showStudyAnswer completed");
 }
 
-// Replace answerStudyCard with this diagnostic version
 function answerStudyCard(rating) {
-    console.log(`answerStudyCard called with rating: ${rating}`);
-    
     // Get current item from queue
-    if (studySession.currentIndex >= studySession.queue.length) {
-        console.log("Invalid study session index");
-        return;
-    }
+    if (studySession.currentIndex >= studySession.queue.length) return;
     
     const { pageId, cardIndex } = studySession.queue[studySession.currentIndex];
     
-    console.log(`Answering card ${cardIndex} from page ${pageId}`);
-    
     // Get card
     if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) {
-        console.log("Invalid card, skipping to next");
+        // Skip invalid card
         studySession.currentIndex++;
         saveStudySession();
         showStudyCard();
@@ -3695,24 +3607,8 @@ function answerStudyCard(rating) {
     
     const card = allFlashcards[pageId].cards[cardIndex];
     
-    // Log card state before
-    console.log("Card before update:", {
-        interval: card.interval,
-        ease: card.ease,
-        due: card.due,
-        reviewCount: card.reviewCount
-    });
-    
     // Apply spaced repetition algorithm
     applySpacedRepetition(card, rating);
-    
-    // Log card state after
-    console.log("Card after update:", {
-        interval: card.interval,
-        ease: card.ease,
-        due: card.due,
-        reviewCount: card.reviewCount
-    });
     
     // Record review
     recordCardReview(cardIndex, pageId, rating);
@@ -3721,12 +3617,11 @@ function answerStudyCard(rating) {
     saveFlashcardsToLocalStorage();
     saveFlashcardsToServer();
     
-    // NUCLEAR OPTION: Hide buttons by removing from DOM again
-    const answerButtonsDiv = document.getElementById('study-answer-buttons');
-    if (answerButtonsDiv && answerButtonsDiv.parentNode) {
-        console.log("Removing buttons from DOM after answer");
-        window._savedButtonsDiv = answerButtonsDiv;
-        answerButtonsDiv.parentNode.removeChild(answerButtonsDiv);
+    // CRITICAL: Hide answer buttons before showing next card
+    const answerButtons = document.getElementById('study-answer-buttons');
+    if (answerButtons) {
+        answerButtons.setAttribute('style', 'display: none !important');
+        answerButtons.classList.add('force-hidden');
     }
     
     // Hide answer 
@@ -3744,13 +3639,7 @@ function answerStudyCard(rating) {
     // Move to next card
     studySession.currentIndex++;
     saveStudySession();
-    
-    // Log deck state before showing next card
-    debugDeckCounts();
-    
     showStudyCard();
-    
-    console.log("answerStudyCard completed");
 }
 
 function showStudyCompletion() {
@@ -3804,57 +3693,30 @@ function showStudyCompletion() {
     }
 }
 
-// Replace exitStudyMode with this diagnostic version
 function exitStudyMode() {
-    console.log("exitStudyMode called");
-    
-    // Log deck state before exiting
-    console.log("Deck state before exit:");
-    debugDeckCounts();
-    
     // Mark study session as inactive
     studySession.active = false;
     saveStudySession();
     
-    // CRITICAL: Force redraw by adding a dummy element then removing it
-    const body = document.body;
-    const dummy = document.createElement('div');
-    dummy.style.display = 'none';
-    body.appendChild(dummy);
-    
-    // Force reflow
-    void dummy.offsetHeight;
+    // Clear any cached counts and force update
+    Object.keys(allFlashcards).forEach(pageId => {
+        if (allFlashcards[pageId]._cachedCounts) {
+            delete allFlashcards[pageId]._cachedCounts;
+        }
+    });
     
     // Update deck view with latest progress
-    console.log("Calling renderPagesList and updateDueCounts");
     renderPagesList();
     updateDueCounts();
     
-    // Remove dummy element
-    body.removeChild(dummy);
-    
-    // Log deck state after rendering
-    console.log("Deck state after rendering:");
-    debugDeckCounts();
-    
-    // Switch to home view with slight delay to allow state update
+    // Force UI refresh with a slight delay
     setTimeout(() => {
-        console.log("Showing home view");
-        showView('home');
-        
-        // Force a second update after view change
-        setTimeout(() => {
-            console.log("Forcing second update");
-            renderPagesList();
-            updateDueCounts();
-            
-            // Final deck state log
-            console.log("Final deck state:");
-            debugDeckCounts();
-        }, 300);
-    }, 100);
+        renderPagesList();
+        updateDueCounts();
+    }, 200);
     
-    console.log("exitStudyMode completed");
+    // Switch to home view
+    showView('home');
 }
 
 // Save flashcards to localStorage (for persistence between syncs)
@@ -4014,210 +3876,3 @@ function debounce(func, wait = 300) {
         timeout = setTimeout(() => func.apply(this, args), wait);
     };
 }
-
-
-// Copy and paste this entire script block to the VERY END of your app.js file
-
-// ========= PERSISTENT FIX FOR UI ISSUES =========
-// This script continuously monitors and fixes UI issues
-
-(function() {
-    console.log("Starting persistent UI fix monitor");
-    
-    // Fix for the map error in updateDetailedStats
-    function fixStatsError() {
-        try {
-            // Create a safer version of updateDetailedStats
-            const originalUpdateDetailedStats = window.updateDetailedStats;
-            
-            if (originalUpdateDetailedStats) {
-                window.updateDetailedStats = function() {
-                    try {
-                        const detailedStatsContainer = document.getElementById('detailed-stats-container');
-                        if (!detailedStatsContainer) return;
-                        
-                        // Add error protection for map operations
-                        if (typeof window.userStudyStats === 'undefined') {
-                            window.userStudyStats = {
-                                cardsStudied: 0,
-                                totalReviews: 0,
-                                correctReviews: 0,
-                                studyTimeMinutes: 0,
-                                streakDays: 0,
-                                lastStudyDate: null,
-                                reviewHistory: [],
-                                deckStats: {}
-                            };
-                        }
-                        
-                        if (!Array.isArray(window.userStudyStats.reviewHistory)) {
-                            window.userStudyStats.reviewHistory = [];
-                        }
-                        
-                        // Call original function, but catch any errors
-                        originalUpdateDetailedStats.apply(this, arguments);
-                    } catch (e) {
-                        console.error("Error in updateDetailedStats:", e);
-                    }
-                };
-                console.log("Fixed updateDetailedStats function");
-            }
-        } catch (e) {
-            console.error("Error fixing stats function:", e);
-        }
-    }
-    
-    // Function to fix the answer buttons visibility
-    function fixAnswerButtons() {
-        try {
-            // Check if we're in the cards or study view
-            const cardsView = document.getElementById('cards-view');
-            const studyView = document.getElementById('study-view');
-            const isCardsViewActive = cardsView && window.getComputedStyle(cardsView).display !== 'none';
-            const isStudyViewActive = studyView && window.getComputedStyle(studyView).display !== 'none';
-            
-            if (!isCardsViewActive && !isStudyViewActive) {
-                return; // Not in a relevant view
-            }
-            
-            // Determine which elements to look for
-            const viewPrefix = isCardsViewActive ? '' : 'study-';
-            const answerButtonsId = isCardsViewActive ? 'answer-buttons-container' : 'study-answer-buttons';
-            
-            // Get relevant elements
-            const answerEl = document.getElementById(viewPrefix + 'answer');
-            const answerButtons = document.getElementById(answerButtonsId);
-            const showAnswerBtn = document.getElementById(viewPrefix + 'show-answer') || 
-                                  document.getElementById('toggle-button'); // For cards view
-            
-            if (!answerEl || !answerButtons) {
-                return; // Missing required elements
-            }
-            
-            // Check if answer is hidden
-            const isAnswerHidden = answerEl.classList.contains('hidden');
-            
-            // Apply fixes based on answer visibility
-            if (isAnswerHidden) {
-                // Answer is hidden, buttons should be hidden
-                answerButtons.style.cssText = 'display: none !important';
-                
-                // Show the show answer button
-                if (showAnswerBtn) {
-                    showAnswerBtn.style.display = 'block';
-                }
-            } else {
-                // Answer is visible, buttons should be shown
-                answerButtons.style.cssText = 'display: flex !important';
-                
-                // Hide the show answer button
-                if (showAnswerBtn) {
-                    showAnswerBtn.style.display = 'none';
-                }
-            }
-        } catch (e) {
-            console.error("Error fixing answer buttons:", e);
-        }
-    }
-    
-    // Function to fix deck counts display
-    function fixDeckCounts() {
-        try {
-            // Only run if we're in the home view
-            const homeView = document.getElementById('home-view');
-            if (!homeView || window.getComputedStyle(homeView).display === 'none') {
-                return;
-            }
-            
-            // Force recalculation of deck counts
-            if (typeof window.renderPagesList === 'function') {
-                window.renderPagesList();
-            }
-            
-            if (typeof window.updateDueCounts === 'function') {
-                window.updateDueCounts();
-            }
-        } catch (e) {
-            console.error("Error fixing deck counts:", e);
-        }
-    }
-    
-    // Apply all fixes at once
-    function applyAllFixes() {
-        fixStatsError();
-        fixAnswerButtons();
-        fixDeckCounts();
-    }
-    
-    // Fix the map error immediately
-    fixStatsError();
-    
-    // Create a MutationObserver to watch for DOM changes
-    try {
-        const observer = new MutationObserver(function(mutations) {
-            // Only call fixes if there are actual mutations
-            if (mutations.length > 0) {
-                fixAnswerButtons();
-            }
-        });
-        
-        // Start observing the document with the configured parameters
-        observer.observe(document.body, { 
-            childList: true, 
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['class', 'style', 'display']
-        });
-        console.log("Mutation observer setup complete");
-    } catch (e) {
-        console.error("Error setting up mutation observer:", e);
-    }
-    
-    // Intercept clicks on critical buttons
-    function interceptClicks() {
-        try {
-            // Intercept document clicks
-            document.addEventListener('click', function(e) {
-                // Wait a moment for the default action to complete
-                setTimeout(function() {
-                    // Fix the buttons
-                    fixAnswerButtons();
-                    
-                    // If we're going back to decks, fix counts
-                    if (e.target && e.target.closest('.back-button')) {
-                        setTimeout(fixDeckCounts, 100);
-                    }
-                }, 10);
-            }, true);
-            
-            console.log("Click interception setup complete");
-        } catch (e) {
-            console.error("Error setting up click interception:", e);
-        }
-    }
-    
-    // Set up regular polling to ensure fixes stay applied
-    try {
-        const checkInterval = setInterval(applyAllFixes, 500);
-        console.log("Regular polling setup complete");
-        
-        // Clean up after 10 minutes to avoid memory leaks
-        setTimeout(function() {
-            clearInterval(checkInterval);
-        }, 10 * 60 * 1000);
-    } catch (e) {
-        console.error("Error setting up polling:", e);
-    }
-    
-    // Intercept clicks
-    interceptClicks();
-    
-    // Apply fixes now
-    applyAllFixes();
-    
-    // Apply fixes again after a delay to handle async loading
-    setTimeout(applyAllFixes, 1000);
-    setTimeout(applyAllFixes, 2000);
-    
-    console.log("Persistent UI fix monitor initialized");
-})();
