@@ -42,6 +42,37 @@ document.addEventListener('DOMContentLoaded', () => {
     init();
 });
 
+function debugDeckCounts() {
+    console.log("========== DECK COUNT DIAGNOSTICS ==========");
+    Object.keys(allFlashcards).forEach(pageId => {
+        const page = allFlashcards[pageId];
+        if (!page.cards) return;
+        
+        let newCount = 0;
+        let dueCount = 0;
+        let reviewedCount = 0;
+        
+        const today = new Date();
+        
+        page.cards.forEach(card => {
+            if (card.suspended) return;
+            
+            if (!card.due) {
+                newCount++;
+            } else if (new Date(card.due) <= today) {
+                dueCount++;
+            } else if (card.reviewCount > 0) {
+                reviewedCount++;
+            }
+        });
+        
+        console.log(`Deck: ${page.pageTitle}`);
+        console.log(`- New: ${newCount}, Due: ${dueCount}, Reviewed: ${reviewedCount}`);
+        console.log(`- Total Cards: ${page.cards.length}`);
+    });
+    console.log("===========================================");
+}
+
 // View Management Functions
 function showView(viewName) {
     console.log(`Switching to view: ${viewName}`);
@@ -3436,9 +3467,13 @@ function saveStudySession() {
     }
 }
 
+// Replace showStudyCard with this diagnostic version
 function showStudyCard() {
+    console.log("showStudyCard called");
+    
     // Check if we've reached the end of the queue
     if (studySession.currentIndex >= studySession.queue.length) {
+        console.log("End of queue reached, showing completion");
         showStudyCompletion();
         return;
     }
@@ -3447,9 +3482,11 @@ function showStudyCard() {
     const currentItem = studySession.queue[studySession.currentIndex];
     const { pageId, cardIndex, type } = currentItem;
     
+    console.log(`Showing card ${cardIndex} from page ${pageId}, type: ${type}`);
+    
     // Get card from flashcards
     if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) {
-        // Skip invalid card
+        console.log("Invalid card, skipping to next");
         studySession.currentIndex++;
         saveStudySession();
         showStudyCard();
@@ -3458,13 +3495,25 @@ function showStudyCard() {
     
     const card = allFlashcards[pageId].cards[cardIndex];
     
-    // CRITICAL: Forcefully hide answer buttons with more aggressive approach
-    const answerButtons = document.getElementById('study-answer-buttons');
-    if (answerButtons) {
-        // Force inline style with !important
-        answerButtons.setAttribute('style', 'display: none !important');
-        // Also add a class for CSS-based hiding
-        answerButtons.classList.add('force-hidden');
+    // NUCLEAR OPTION: Hide all rating buttons from the DOM completely
+    const answerButtonsDiv = document.getElementById('study-answer-buttons');
+    
+    if (answerButtonsDiv) {
+        console.log("Found answer buttons, hiding them");
+        // First, try standard approach
+        answerButtonsDiv.style.display = 'none';
+        // Then try force-hidden class
+        answerButtonsDiv.classList.add('force-hidden');
+        
+        // Nuclear approach: actually remove the buttons from DOM temporarily
+        if (answerButtonsDiv.parentNode) {
+            console.log("Temporarily removing buttons from DOM");
+            // Store reference for later
+            window._savedButtonsDiv = answerButtonsDiv;
+            answerButtonsDiv.parentNode.removeChild(answerButtonsDiv);
+        }
+    } else {
+        console.log("Could not find answer buttons div!");
     }
     
     // Get UI elements
@@ -3498,7 +3547,10 @@ function showStudyCard() {
     }
     
     // Show answer button
-    if (showAnswerBtn) showAnswerBtn.style.display = 'block';
+    if (showAnswerBtn) {
+        console.log("Showing answer button");
+        showAnswerBtn.style.display = 'block';
+    }
     
     // Update study status
     updateStudyStatusDisplay();
@@ -3506,10 +3558,7 @@ function showStudyCard() {
     // Update spaced repetition button labels
     updateStudyAnswerButtonLabels(card);
     
-    // Add CSS to force-hide buttons just to be extra sure
-    const style = document.createElement('style');
-    style.textContent = '.force-hidden { display: none !important; }';
-    document.head.appendChild(style);
+    console.log("showStudyCard completed");
 }
 
 function updateStudyStatusDisplay() {
@@ -3569,36 +3618,75 @@ function updateStudyAnswerButtonLabels(card) {
     if (easyLabel) easyLabel.textContent = easyInterval;
 }
 
+// Replace showStudyAnswer with this diagnostic version
 function showStudyAnswer() {
+    console.log("showStudyAnswer called");
+    
     const answerEl = document.getElementById('study-answer');
     const showAnswerBtn = document.getElementById('study-show-answer');
-    const answerButtons = document.getElementById('study-answer-buttons');
     
     if (answerEl) {
+        console.log("Revealing answer");
         answerEl.classList.remove('hidden');
     }
     
     if (showAnswerBtn) {
+        console.log("Hiding show answer button");
         showAnswerBtn.style.display = 'none';
     }
     
-    // CRITICAL: Show answer buttons properly by removing forced hiding
-    if (answerButtons) {
-        answerButtons.removeAttribute('style');
-        answerButtons.classList.remove('force-hidden');
-        answerButtons.style.display = 'flex';
+    // NUCLEAR OPTION: Re-add the buttons to DOM
+    if (window._savedButtonsDiv) {
+        console.log("Re-adding answer buttons to DOM");
+        // Find the right place to add them back - assuming it's the study card
+        const studyCard = document.getElementById('study-card');
+        if (studyCard) {
+            // Find the footer area
+            const footer = studyCard.querySelector('.study-footer');
+            if (footer) {
+                console.log("Found study footer, adding buttons back");
+                footer.appendChild(window._savedButtonsDiv);
+                // Make buttons visible
+                window._savedButtonsDiv.classList.remove('force-hidden');
+                window._savedButtonsDiv.style.display = 'flex';
+            } else {
+                console.log("Could not find study footer!");
+            }
+        } else {
+            console.log("Could not find study card!");
+        }
+    } else {
+        console.log("No saved buttons div found!");
+        
+        // Try to find the buttons div
+        const answerButtons = document.getElementById('study-answer-buttons');
+        if (answerButtons) {
+            console.log("Found answer buttons, making them visible");
+            answerButtons.classList.remove('force-hidden');
+            answerButtons.style.display = 'flex';
+        }
     }
+    
+    console.log("showStudyAnswer completed");
 }
 
+// Replace answerStudyCard with this diagnostic version
 function answerStudyCard(rating) {
+    console.log(`answerStudyCard called with rating: ${rating}`);
+    
     // Get current item from queue
-    if (studySession.currentIndex >= studySession.queue.length) return;
+    if (studySession.currentIndex >= studySession.queue.length) {
+        console.log("Invalid study session index");
+        return;
+    }
     
     const { pageId, cardIndex } = studySession.queue[studySession.currentIndex];
     
+    console.log(`Answering card ${cardIndex} from page ${pageId}`);
+    
     // Get card
     if (!allFlashcards[pageId] || !allFlashcards[pageId].cards[cardIndex]) {
-        // Skip invalid card
+        console.log("Invalid card, skipping to next");
         studySession.currentIndex++;
         saveStudySession();
         showStudyCard();
@@ -3607,8 +3695,24 @@ function answerStudyCard(rating) {
     
     const card = allFlashcards[pageId].cards[cardIndex];
     
+    // Log card state before
+    console.log("Card before update:", {
+        interval: card.interval,
+        ease: card.ease,
+        due: card.due,
+        reviewCount: card.reviewCount
+    });
+    
     // Apply spaced repetition algorithm
     applySpacedRepetition(card, rating);
+    
+    // Log card state after
+    console.log("Card after update:", {
+        interval: card.interval,
+        ease: card.ease,
+        due: card.due,
+        reviewCount: card.reviewCount
+    });
     
     // Record review
     recordCardReview(cardIndex, pageId, rating);
@@ -3617,11 +3721,12 @@ function answerStudyCard(rating) {
     saveFlashcardsToLocalStorage();
     saveFlashcardsToServer();
     
-    // CRITICAL: Hide answer buttons before showing next card
-    const answerButtons = document.getElementById('study-answer-buttons');
-    if (answerButtons) {
-        answerButtons.setAttribute('style', 'display: none !important');
-        answerButtons.classList.add('force-hidden');
+    // NUCLEAR OPTION: Hide buttons by removing from DOM again
+    const answerButtonsDiv = document.getElementById('study-answer-buttons');
+    if (answerButtonsDiv && answerButtonsDiv.parentNode) {
+        console.log("Removing buttons from DOM after answer");
+        window._savedButtonsDiv = answerButtonsDiv;
+        answerButtonsDiv.parentNode.removeChild(answerButtonsDiv);
     }
     
     // Hide answer 
@@ -3639,7 +3744,13 @@ function answerStudyCard(rating) {
     // Move to next card
     studySession.currentIndex++;
     saveStudySession();
+    
+    // Log deck state before showing next card
+    debugDeckCounts();
+    
     showStudyCard();
+    
+    console.log("answerStudyCard completed");
 }
 
 function showStudyCompletion() {
@@ -3693,30 +3804,57 @@ function showStudyCompletion() {
     }
 }
 
+// Replace exitStudyMode with this diagnostic version
 function exitStudyMode() {
+    console.log("exitStudyMode called");
+    
+    // Log deck state before exiting
+    console.log("Deck state before exit:");
+    debugDeckCounts();
+    
     // Mark study session as inactive
     studySession.active = false;
     saveStudySession();
     
-    // Clear any cached counts and force update
-    Object.keys(allFlashcards).forEach(pageId => {
-        if (allFlashcards[pageId]._cachedCounts) {
-            delete allFlashcards[pageId]._cachedCounts;
-        }
-    });
+    // CRITICAL: Force redraw by adding a dummy element then removing it
+    const body = document.body;
+    const dummy = document.createElement('div');
+    dummy.style.display = 'none';
+    body.appendChild(dummy);
+    
+    // Force reflow
+    void dummy.offsetHeight;
     
     // Update deck view with latest progress
+    console.log("Calling renderPagesList and updateDueCounts");
     renderPagesList();
     updateDueCounts();
     
-    // Force UI refresh with a slight delay
-    setTimeout(() => {
-        renderPagesList();
-        updateDueCounts();
-    }, 200);
+    // Remove dummy element
+    body.removeChild(dummy);
     
-    // Switch to home view
-    showView('home');
+    // Log deck state after rendering
+    console.log("Deck state after rendering:");
+    debugDeckCounts();
+    
+    // Switch to home view with slight delay to allow state update
+    setTimeout(() => {
+        console.log("Showing home view");
+        showView('home');
+        
+        // Force a second update after view change
+        setTimeout(() => {
+            console.log("Forcing second update");
+            renderPagesList();
+            updateDueCounts();
+            
+            // Final deck state log
+            console.log("Final deck state:");
+            debugDeckCounts();
+        }, 300);
+    }, 100);
+    
+    console.log("exitStudyMode completed");
 }
 
 // Save flashcards to localStorage (for persistence between syncs)

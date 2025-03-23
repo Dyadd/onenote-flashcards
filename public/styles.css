@@ -1,5 +1,14 @@
 /* Enhanced Styles for OneNote Flashcards with Anki Features */
 
+.force-hidden {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    position: absolute !important;
+    left: -9999px !important;
+    pointer-events: none !important;
+}
+
 /* Horizontal Navbar */
 .app-header {
   background-color: #5C73F2;
