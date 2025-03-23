@@ -3450,11 +3450,10 @@ function showStudyCard() {
     const showAnswerBtn = document.getElementById('study-show-answer');
     const answerButtons = document.getElementById('study-answer-buttons');
     
-    // IMPORTANT: Ensure answer buttons are hidden before anything else
+    // CRITICAL FIX: Explicitly hide answer buttons first using direct DOM manipulation
     if (answerButtons) {
+        // This forces the display style at the element level, overriding any CSS
         answerButtons.style.display = 'none';
-        // Force style with important to override any CSS
-        answerButtons.setAttribute('style', 'display: none !important');
     }
     
     // Update page title
@@ -3554,7 +3553,11 @@ function showStudyAnswer() {
     
     if (answerEl) answerEl.classList.remove('hidden');
     if (showAnswerBtn) showAnswerBtn.style.display = 'none';
-    if (answerButtons) answerButtons.style.display = 'flex';
+    
+    // CRITICAL FIX: Only show answer buttons after revealing the answer
+    if (answerButtons) {
+        answerButtons.style.display = 'flex';
+    }
 }
 
 function answerStudyCard(rating) {
@@ -3646,11 +3649,11 @@ function exitStudyMode() {
     studySession.active = false;
     saveStudySession();
     
-    // Update deck view with latest progress
+    // Update deck view with latest progress - CRITICAL FIX
     renderPagesList();
     updateDueCounts();
     
-    // Study session already handled in showView('home')
+    // Switch to home view
     showView('home');
 }
 
