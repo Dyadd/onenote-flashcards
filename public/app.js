@@ -1897,124 +1897,140 @@ async function loadFlashcards() {
 }
 
 function renderPagesList(filteredPageIds) {
-  console.log('Rendering pages list');
-  const pagesList = document.getElementById('pages-list');
-  if (!pagesList) return;
-  
-  // Clear the list
-  pagesList.innerHTML = '';
-  
-  // Get page IDs - either filtered or all
-  const pageIds = filteredPageIds || Object.keys(allFlashcards);
-  
-  // Check if we have any pages
-  if (pageIds.length === 0) {
-      const emptyItem = document.createElement('li');
-      emptyItem.className = 'list-group-item text-center';
-      emptyItem.innerHTML = filteredPageIds 
-          ? '<i class="bi bi-search me-2"></i>No matching flashcards found.' 
-          : '<i class="bi bi-info-circle me-2"></i>No flashcards yet. Sync to create them.';
-      pagesList.appendChild(emptyItem);
-      return;
-  }
-  
-  // Sort pages by title
-  pageIds.sort((a, b) => {
-      const titleA = allFlashcards[a]?.pageTitle || '';
-      const titleB = allFlashcards[b]?.pageTitle || '';
-      return titleA.localeCompare(titleB);
-  });
-  
-  // Add each page to the list with numbered index
-  pageIds.forEach((pageId, index) => {
-      if (!allFlashcards[pageId]) return;
-      
-      const pageData = allFlashcards[pageId];
-      if (!pageData.cards) pageData.cards = [];
-      
-      // Count cards by status
-      let dueCount = 0;
-      let newCount = 0;
-      let inProgressCount = 0;
-      const today = new Date();
-      
-      pageData.cards.forEach(card => {
-          if (card.suspended) return; // Skip suspended cards
-          
-          if (!card.due) {
-              // New card
-              newCount++;
-          } else if (new Date(card.due) <= today) {
-              // Due card
-              dueCount++;
-          } else if (card.reviewCount && card.reviewCount > 0) {
-              // In progress (reviewed but not due)
-              inProgressCount++;
-          }
-      });
-      
-      const totalCards = pageData.cards.length;
-      
-      // Create list item
-      const listItem = document.createElement('li');
-      listItem.className = 'list-group-item deck-item d-flex justify-content-between align-items-center';
-      listItem.dataset.pageId = pageId;
-      
-      // Highlight current page
-      if (pageId === currentPageId) {
-          listItem.classList.add('active');
-      }
-      
-      // Create deck index and title
-      const titleSection = document.createElement('div');
-      titleSection.className = 'deck-title';
-      titleSection.innerHTML = `
-          <span class="deck-index">${index + 1}.</span>
-          <span class="deck-name">${pageData.pageTitle}</span>
-      `;
-      
-      // Create card counts section (Anki style)
-      const countsSection = document.createElement('div');
-      countsSection.className = 'deck-counts';
-      
-      // Only show counts if we have cards
-      if (totalCards > 0) {
-          countsSection.innerHTML = `
-              <span class="count new" title="New cards">${newCount}</span>
-              <span class="count due" title="Cards due to review">${dueCount}</span>
-              <span class="count learned" title="Cards in progress">${inProgressCount}</span>
-          `;
-      } else {
-          countsSection.innerHTML = `<span class="count empty">0</span>`;
-      }
-      
-      // Add elements to list item
-      listItem.appendChild(titleSection);
-      listItem.appendChild(countsSection);
-      
-      // Add click handler
-      listItem.addEventListener('click', () => selectPage(pageId));
-      
-      // Add to list
-      pagesList.appendChild(listItem);
-  });
-  
-  // Show count of results
-  const resultCount = document.createElement('div');
-  resultCount.className = 'text-muted small mt-2';
-  resultCount.textContent = `Showing ${pageIds.length} decks`;
-  
-  // Remove any existing count
-  const existingCount = document.querySelector('.card-body .text-muted.small.mt-2');
-  if (existingCount) {
-      existingCount.remove();
-  }
-  
-  // Add count to container
-  const container = pagesList.closest('.card-body');
-  if (container) {
-      container.appendChild(resultCount);
-  }
+    console.log('Rendering pages list with updated counts');
+    
+    // Clear any cached counts
+    Object.keys(allFlashcards).forEach(pageId => {
+        // Force count recalculation for each deck
+        if (allFlashcards[pageId]._cachedCounts) {
+            delete allFlashcards[pageId]._cachedCounts;
+        }
+    });
+    
+    // Rest of the function remains unchanged
+    const pagesList = document.getElementById('pages-list');
+    if (!pagesList) return;
+    
+    // Clear the list
+    pagesList.innerHTML = '';
+    
+    // Get page IDs - either filtered or all
+    const pageIds = filteredPageIds || Object.keys(allFlashcards);
+    
+    // Check if we have any pages
+    if (pageIds.length === 0) {
+        const emptyItem = document.createElement('li');
+        emptyItem.className = 'list-group-item text-center';
+        emptyItem.innerHTML = filteredPageIds 
+            ? '<i class="bi bi-search me-2"></i>No matching flashcards found.' 
+            : '<i class="bi bi-info-circle me-2"></i>No flashcards yet. Sync to create them.';
+        pagesList.appendChild(emptyItem);
+        return;
+    }
+    
+    // Sort pages by title
+    pageIds.sort((a, b) => {
+        const titleA = allFlashcards[a]?.pageTitle || '';
+        const titleB = allFlashcards[b]?.pageTitle || '';
+        return titleA.localeCompare(titleB);
+    });
+    
+    // Add each page to the list with numbered index
+    pageIds.forEach((pageId, index) => {
+        if (!allFlashcards[pageId]) return;
+        
+        const pageData = allFlashcards[pageId];
+        if (!pageData.cards) pageData.cards = [];
+        
+        // Count cards by status
+        let dueCount = 0;
+        let newCount = 0;
+        let inProgressCount = 0;
+        const today = new Date();
+        
+        pageData.cards.forEach(card => {
+            if (card.suspended) return; // Skip suspended cards
+            
+            if (!card.due) {
+                // New card
+                newCount++;
+            } else if (new Date(card.due) <= today) {
+                // Due card
+                dueCount++;
+            } else if (card.reviewCount && card.reviewCount > 0) {
+                // In progress (reviewed but not due)
+                inProgressCount++;
+            }
+        });
+        
+        const totalCards = pageData.cards.length;
+        
+        // Create list item
+        const listItem = document.createElement('li');
+        listItem.className = 'list-group-item deck-item d-flex justify-content-between align-items-center';
+        listItem.dataset.pageId = pageId;
+        
+        // Highlight current page
+        if (pageId === currentPageId) {
+            listItem.classList.add('active');
+        }
+        
+        // Create deck index and title
+        const titleSection = document.createElement('div');
+        titleSection.className = 'deck-title';
+        titleSection.innerHTML = `
+            <span class="deck-index">${index + 1}.</span>
+            <span class="deck-name">${pageData.pageTitle}</span>
+        `;
+        
+        // Create card counts section (Anki style)
+        const countsSection = document.createElement('div');
+        countsSection.className = 'deck-counts';
+        
+        // Only show counts if we have cards
+        if (totalCards > 0) {
+            countsSection.innerHTML = `
+                <span class="count new" title="New cards">${newCount}</span>
+                <span class="count due" title="Cards due to review">${dueCount}</span>
+                <span class="count learned" title="Cards in progress">${inProgressCount}</span>
+            `;
+        } else {
+            countsSection.innerHTML = `<span class="count empty">0</span>`;
+        }
+        
+        // Add elements to list item
+        listItem.appendChild(titleSection);
+        listItem.appendChild(countsSection);
+        
+        // Add click handler
+        listItem.addEventListener('click', () => selectPage(pageId));
+        
+        // Add to list
+        pagesList.appendChild(listItem);
+    });
+    
+    // Show count of results
+    const resultCount = document.createElement('div');
+    resultCount.className = 'text-muted small mt-2';
+    resultCount.textContent = `Showing ${pageIds.length} decks`;
+    
+    // Remove any existing count
+    const existingCount = document.querySelector('.card-body .text-muted.small.mt-2');
+    if (existingCount) {
+        existingCount.remove();
+    }
+    
+    // Add count to container
+    const container = pagesList.closest('.card-body');
+    if (container) {
+        container.appendChild(resultCount);
+    }
+    
+    // Ensure everything is visible
+    setTimeout(() => {
+        // Force a browser reflow to update UI
+        const forceReflow = document.body.offsetHeight;
+    }, 100);
 }
 
 
@@ -3442,19 +3458,21 @@ function showStudyCard() {
     
     const card = allFlashcards[pageId].cards[cardIndex];
     
+    // CRITICAL: Forcefully hide answer buttons with more aggressive approach
+    const answerButtons = document.getElementById('study-answer-buttons');
+    if (answerButtons) {
+        // Force inline style with !important
+        answerButtons.setAttribute('style', 'display: none !important');
+        // Also add a class for CSS-based hiding
+        answerButtons.classList.add('force-hidden');
+    }
+    
     // Get UI elements
     const questionEl = document.getElementById('study-question');
     const answerEl = document.getElementById('study-answer');
     const pageTitle = document.getElementById('study-page-title');
     const cardType = document.getElementById('study-card-type');
     const showAnswerBtn = document.getElementById('study-show-answer');
-    const answerButtons = document.getElementById('study-answer-buttons');
-    
-    // CRITICAL FIX: Explicitly hide answer buttons first using direct DOM manipulation
-    if (answerButtons) {
-        // This forces the display style at the element level, overriding any CSS
-        answerButtons.style.display = 'none';
-    }
     
     // Update page title
     if (pageTitle) {
@@ -3487,6 +3505,11 @@ function showStudyCard() {
     
     // Update spaced repetition button labels
     updateStudyAnswerButtonLabels(card);
+    
+    // Add CSS to force-hide buttons just to be extra sure
+    const style = document.createElement('style');
+    style.textContent = '.force-hidden { display: none !important; }';
+    document.head.appendChild(style);
 }
 
 function updateStudyStatusDisplay() {
@@ -3551,11 +3574,18 @@ function showStudyAnswer() {
     const showAnswerBtn = document.getElementById('study-show-answer');
     const answerButtons = document.getElementById('study-answer-buttons');
     
-    if (answerEl) answerEl.classList.remove('hidden');
-    if (showAnswerBtn) showAnswerBtn.style.display = 'none';
+    if (answerEl) {
+        answerEl.classList.remove('hidden');
+    }
     
-    // CRITICAL FIX: Only show answer buttons after revealing the answer
+    if (showAnswerBtn) {
+        showAnswerBtn.style.display = 'none';
+    }
+    
+    // CRITICAL: Show answer buttons properly by removing forced hiding
     if (answerButtons) {
+        answerButtons.removeAttribute('style');
+        answerButtons.classList.remove('force-hidden');
         answerButtons.style.display = 'flex';
     }
 }
@@ -3586,6 +3616,25 @@ function answerStudyCard(rating) {
     // Save changes
     saveFlashcardsToLocalStorage();
     saveFlashcardsToServer();
+    
+    // CRITICAL: Hide answer buttons before showing next card
+    const answerButtons = document.getElementById('study-answer-buttons');
+    if (answerButtons) {
+        answerButtons.setAttribute('style', 'display: none !important');
+        answerButtons.classList.add('force-hidden');
+    }
+    
+    // Hide answer 
+    const answerEl = document.getElementById('study-answer');
+    if (answerEl) {
+        answerEl.classList.add('hidden');
+    }
+    
+    // Show answer button for next card
+    const showAnswerBtn = document.getElementById('study-show-answer');
+    if (showAnswerBtn) {
+        showAnswerBtn.style.display = 'block';
+    }
     
     // Move to next card
     studySession.currentIndex++;
@@ -3649,9 +3698,22 @@ function exitStudyMode() {
     studySession.active = false;
     saveStudySession();
     
-    // Update deck view with latest progress - CRITICAL FIX
+    // Clear any cached counts and force update
+    Object.keys(allFlashcards).forEach(pageId => {
+        if (allFlashcards[pageId]._cachedCounts) {
+            delete allFlashcards[pageId]._cachedCounts;
+        }
+    });
+    
+    // Update deck view with latest progress
     renderPagesList();
     updateDueCounts();
+    
+    // Force UI refresh with a slight delay
+    setTimeout(() => {
+        renderPagesList();
+        updateDueCounts();
+    }, 200);
     
     // Switch to home view
     showView('home');
